@@ -1,4 +1,4 @@
-# Required tools and packages
+## Required tools and packages
 
 ### Golang
 
@@ -29,3 +29,22 @@ Tested with:
 ### cfitsio
 
 TODO, would need to install `libcfitsio-dev` (ubuntu) or `cfitsio` (macOS homebrew)
+
+## Build
+
+gRPC files need to be built first, followed by the services.
+
+```bash
+# From the project root
+./scripts/build-proto.sh
+./scripts/build-services.sh
+```
+
+## Run
+Compiled services are found in the `build` folder.
+
+```bash
+# From the project root
+./build/controller --port 8080
+./build/worker --remoteAddress localhost:8080
+```
