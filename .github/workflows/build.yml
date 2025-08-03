@@ -18,6 +18,11 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.24'
-
-      - name: Build
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt install -y protoc-gen-go protoc-gen-go-grpc
+      - name: Build gRPC files
+        run: ./scripts/build-proto.sh
+      - name: Build services
         run: ./scripts/build-services.sh
