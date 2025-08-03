@@ -1,0 +1,10 @@
+.idea
+.vscode
+
+# Generated gRPC code
+/pkg/grpc/*.pb.go
+
+# Build artifacts
+/build/*
+
+
