@@ -20,4 +20,4 @@ jobs:
           go-version: '1.24'
 
       - name: Build
-        run: ./scripts/build.sh
+        run: ./scripts/build-services.sh
