@@ -5,8 +5,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func main() 
-{
+func main() {
 	id := uuid.New()
 	fmt.Printf("Started HTTP API with UUID: %s\n", id.String())
 }
