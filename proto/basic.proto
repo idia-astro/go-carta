@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package cartaProto;
+option go_package = "./cartaProto";
+
+message Empty {}
+
+message StatusResponse {
+  bool status = 1;
+  string statusMessage = 2;
+  string instanceId = 3;
+}

@@ -3,38 +3,57 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	pb "idia-astro/go-carta/pkg/grpc"
 	"log"
-	"time"
+	"net"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
-	pb "idia-astro/go-carta/pkg/grpc"
 )
 
 var (
-	remoteAddress = flag.String("remoteAddress", "localhost:8080", "Address of the controller server")
+	port = flag.Int("port", 8080, "gRPC server port")
 )
 
+type fileInfoServer struct {
+	pb.UnimplementedFileInfoServiceServer
+	instanceId uuid.UUID
+}
+type fileListServer struct {
+	pb.UnimplementedFileListServiceServer
+	instanceId uuid.UUID
+}
+
+func (s *fileInfoServer) CheckStatus(_ context.Context, _ *pb.Empty) (*pb.StatusResponse, error) {
+	log.Printf("Received CheckStatus message")
+	return &pb.StatusResponse{Status: true, StatusMessage: "FileInfoService is running", InstanceId: s.instanceId.String()}, nil
+}
+
+func (s *fileListServer) CheckStatus(_ context.Context, _ *pb.Empty) (*pb.StatusResponse, error) {
+	log.Printf("Received CheckStatus message")
+	return &pb.StatusResponse{Status: true, StatusMessage: "FileListService is running", InstanceId: s.instanceId.String()}, nil
+}
+
 func main() {
-	id := uuid.New()
-	log.Printf("Starting worker with UUID: %s\n", id.String())
-
+	// Parse arguments and start TCP listener
 	flag.Parse()
-	conn, err := grpc.NewClient(*remoteAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
-		log.Fatalf("Coult not connect to controller: %v", err)
+		log.Fatalf("failed to listen: %v", err)
 	}
-	defer conn.Close()
+	defer listener.Close()
 
-	c := pb.NewFileServiceClient(conn)
+	id := uuid.New()
+	log.Printf("Starting worker with instance ID: %s\n", id.String())
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	r, err := c.CheckStatus(ctx, &pb.Empty{})
-	if err != nil {
-		log.Fatalf("could not check controller status: %v", err)
+	// Set up gRPC server
+	s := grpc.NewServer()
+	pb.RegisterFileListServiceServer(s, &fileListServer{instanceId: id})
+	pb.RegisterFileInfoServiceServer(s, &fileInfoServer{instanceId: id})
+	log.Printf("server listening at %v", listener.Addr())
+	if err := s.Serve(listener); err != nil {
+		log.Fatalf("failed to serve: %v", err)
 	}
-	log.Printf("Response from controller: %s", r.StatusMessage)
+
 }

@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+import "basic.proto";
+import "files.proto";
+import "enums.proto";
+
+package cartaProto;
+option go_package = "./cartaProto";
+
+message FileListRequest {
+  string path = 1;
+  FileListType type = 2;
+  bool ignoreHidden = 3;
+}
+
+message FileListResponse {
+  repeated BasicFileInfo files = 1;
+}
+
+service FileListService {
+  // Basic status check to ensure microservice is running
+  rpc CheckStatus(Empty) returns  (StatusResponse) {}
+  rpc GetFileList (FileListRequest) returns (FileListResponse) {}
+}

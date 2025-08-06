@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+import "basic.proto";
+import "files.proto";
+
+package cartaProto;
+option go_package = "./cartaProto";
+
+message FileInfoRequest {
+  string path = 1;
+}
+
+message HduInfo {
+  int32 hduNum = 1;
+  int32 hduType = 2;
+  int32 dataType = 3;
+  repeated int32 hduShape = 4;
+}
+
+message FileInfoResponse {
+  BasicFileInfo basicInfo = 1;
+  int32 hduNum = 2;
+  repeated HduInfo hudInfo = 3;
+}
+
+service FileInfoService {
+  // Basic status check to ensure microservice is running
+  rpc CheckStatus(Empty) returns  (StatusResponse) {}
+  rpc GetFileInfo (FileInfoRequest) returns (FileInfoResponse) {}
+}

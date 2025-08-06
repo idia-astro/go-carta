@@ -5,6 +5,8 @@ if [ ! -d "proto" ] || [ ! -d "scripts" ]; then
     exit 1
 fi
 
+# Clean up old generated files
+rm -rf pkg/grpc
 mkdir -p pkg/grpc
 
 # Generate Go code from proto files

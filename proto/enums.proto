@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package cartaProto;
+option go_package = "./cartaProto";
+
+enum FileType {
+  CASA = 0;
+  CRTF = 1;
+  DS9_REG = 2;
+  FITS = 3;
+  HDF5 = 4;
+  MIRIAD = 5;
+  UNKNOWN = 6;
+}
+
+enum FileListType {
+  ALL = 0;
+  BY_EXTENSION = 1;
+  BY_MAGIC_NUMBER = 2;
+}
