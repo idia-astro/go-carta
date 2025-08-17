@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	pb "idia-astro/go-carta/pkg/grpc"
+	"idia-astro/go-carta/pkg/shared"
 )
 
 var (
@@ -26,7 +27,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Coult not connect to worker: %v", err)
 	}
-	defer conn.Close()
+	defer helpers.CloseOrLog(conn)
 
 	fileInfoClient := pb.NewFileInfoServiceClient(conn)
 	fileListClient := pb.NewFileListServiceClient(conn)

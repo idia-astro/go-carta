@@ -4,12 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	pb "idia-astro/go-carta/pkg/grpc"
 	"log"
 	"net"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+
+	pb "idia-astro/go-carta/pkg/grpc"
+	utils "idia-astro/go-carta/pkg/shared"
 )
 
 var (
@@ -42,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	defer listener.Close()
+	defer utils.CloseOrLog(listener)
 
 	id := uuid.New()
 	log.Printf("Starting worker with instance ID: %s\n", id.String())
