@@ -32,12 +32,17 @@ TODO, would need to install `libcfitsio-dev` (ubuntu) or `cfitsio` (macOS homebr
 
 ## Build
 
-gRPC files need to be built first, followed by the services.
+gRPC files need to be built first, followed by the services. Use the provided Makefile:
 
 ```bash
 # From the project root
-./scripts/build-proto.sh
-./scripts/build-services.sh
+make proto     # Build gRPC protobuf files
+make services  # Build all services
+```
+
+For other development tasks, see available commands:
+```bash
+make help
 ```
 
 ## Run
