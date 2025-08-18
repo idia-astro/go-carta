@@ -52,4 +52,5 @@ Compiled services are found in the `build` folder.
 # From the project root
 ./build/worker --port 8080
 ./build/controller --remoteAddress localhost:8080
+./build/spawner --workerProcess build/worker --port 8080
 ```
