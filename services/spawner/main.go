@@ -31,6 +31,8 @@ type WorkerInfo struct {
 }
 
 func main() {
+	flag.Parse()
+
 	id := uuid.New()
 	fmt.Printf("Started spawner with UUID: %s\n", id.String())
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM

@@ -38,8 +38,8 @@ func (s *fileListServer) CheckStatus(_ context.Context, _ *pb.Empty) (*pb.Status
 }
 
 func main() {
-	// Parse arguments and start TCP listener
 	flag.Parse()
+
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -57,5 +57,4 @@ func main() {
 	if err := s.Serve(listener); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
-
 }

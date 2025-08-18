@@ -19,10 +19,11 @@ var (
 )
 
 func main() {
+	flag.Parse()
+
 	id := uuid.New()
 	log.Printf("Starting controller with UUID: %s\n", id.String())
 
-	flag.Parse()
 	conn, err := grpc.NewClient(*remoteAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Coult not connect to worker: %v", err)
