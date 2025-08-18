@@ -70,8 +70,7 @@ func main() {
 			Process: cmd,
 			Port:    port,
 		}
-		// Add timing metrics
-		w.Header().Set("Server-Timing", fmt.Sprintf("spawn-time;dur=%.2f, check-time;dur=%.2f", spawnerDuration.Seconds()*1000.0, testWorkerDuration.Seconds()*1000.0))
+		httpHelpers.WriteTimings(w, httpHelpers.Timings{"spawn-time": spawnerDuration, "check-time": testWorkerDuration})
 		httpHelpers.WriteOutput(w, map[string]any{"port": port, "workerId": workerId.String()})
 	})
 
@@ -119,7 +118,7 @@ func main() {
 				log.Printf("Error connecting to worker: %v\n", err)
 				isReachable = false
 			} else {
-				w.Header().Set("Server-Timing", fmt.Sprintf("check-time;dur=%.2f", elapsed.Seconds()*1000.0))
+				httpHelpers.WriteTimings(w, httpHelpers.Timings{"check-time": elapsed})
 			}
 			output["isReachable"] = isReachable
 		}
@@ -147,7 +146,7 @@ func main() {
 		}
 		delete(workerMap, workerId)
 
-		w.Header().Set("Server-Timing", fmt.Sprintf("stop-time;dur=%.2f", elapsed.Seconds()*1000.0))
+		httpHelpers.WriteTimings(w, httpHelpers.Timings{"stop-time": elapsed})
 		httpHelpers.WriteOutput(w, map[string]any{"msg": "Worker stopped"})
 	})
 
