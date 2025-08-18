@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -25,16 +24,6 @@ type fileInfoServer struct {
 type fileListServer struct {
 	pb.UnimplementedFileListServiceServer
 	instanceId uuid.UUID
-}
-
-func (s *fileInfoServer) CheckStatus(_ context.Context, _ *pb.Empty) (*pb.StatusResponse, error) {
-	log.Printf("Received CheckStatus message")
-	return &pb.StatusResponse{Status: true, StatusMessage: "FileInfoService is running", InstanceId: s.instanceId.String()}, nil
-}
-
-func (s *fileListServer) CheckStatus(_ context.Context, _ *pb.Empty) (*pb.StatusResponse, error) {
-	log.Printf("Received CheckStatus message")
-	return &pb.StatusResponse{Status: true, StatusMessage: "FileListService is running", InstanceId: s.instanceId.String()}, nil
 }
 
 func main() {

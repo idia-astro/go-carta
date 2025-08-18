@@ -3,10 +3,10 @@ POST http://localhost:8080
 ###
 
 
-@workerId = b067ea03-f648-4832-9741-08140debc31a
+@workerId = 0c5c5dfb-6337-4e76-82d5-7697a4025eef
 
 ### Listing workers
-GET http://localhost:8080/workers
+GET http://192.168.50.13:8080/workers
 
 ### Get worker info {{workerId}}
 GET http://localhost:8080/worker/{{workerId}}

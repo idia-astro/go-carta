@@ -22,6 +22,7 @@ import (
 var (
 	workerProcess = flag.String("workerProcess", "build/worker", "Path to worker binary")
 	port          = flag.Int("port", 8080, "HTTP server port")
+	hostname      = flag.String("hostname", "", "Hostname to listen on")
 	timeout       = flag.Int("timeout", 5, "Spawn timeout in seconds")
 )
 
@@ -73,7 +74,13 @@ func main() {
 			Port:    port,
 		}
 		httpHelpers.WriteTimings(w, httpHelpers.Timings{"spawn-time": spawnerDuration, "check-time": testWorkerDuration})
-		httpHelpers.WriteOutput(w, map[string]any{"port": port, "workerId": workerId.String()})
+
+		workerHostname := *hostname
+		if workerHostname == "" {
+			workerHostname = "localhost"
+		}
+
+		httpHelpers.WriteOutput(w, map[string]any{"port": port, "address": workerHostname, "workerId": workerId.String()})
 	})
 
 	// List all workers
@@ -100,10 +107,16 @@ func main() {
 			return
 		}
 
+		workerHostname := *hostname
+		if workerHostname == "" {
+			workerHostname = "localhost"
+		}
+
 		alive := info.Process.ProcessState == nil
 
 		output := map[string]any{
 			"port":     info.Port,
+			"address":  workerHostname,
 			"workerId": workerId,
 			"pid":      info.Process.Process.Pid,
 			"alive":    alive,
@@ -153,7 +166,7 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", *port),
+		Addr:    fmt.Sprintf("%s:%d", *hostname, *port),
 		Handler: r,
 	}
 
