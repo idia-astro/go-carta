@@ -1,4 +1,4 @@
-package processUtils
+package processHelpers
 
 import (
 	"bufio"

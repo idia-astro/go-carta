@@ -4,18 +4,19 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
+	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/log"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"idia-astro/go-carta/services/spawner/internal"
+	"idia-astro/go-carta/services/spawner/internal/httpHelpers"
+	"idia-astro/go-carta/services/spawner/internal/processHelpers"
 )
 
 var (
@@ -38,66 +39,69 @@ func main() {
 
 	workerMap := make(map[string]*WorkerInfo)
 
-	app := fiber.New()
+	r := chi.NewRouter()
 
 	// Start a new worker
-	app.Post("/", func(c *fiber.Ctx) error {
+	r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
-		cmd, port, err := processUtils.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second)
+		cmd, port, err := processHelpers.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second)
 		spawnerDuration := time.Since(startTime)
 		if err != nil {
-			log.Errorf("Error spawning worker on free port: %v\n", err)
-			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{"msg": "Error spawning worker"})
+			log.Printf("Error spawning worker on free port: %v\n", err)
+			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error spawning worker")
+			return
 		}
 
 		startTime = time.Now()
-		err = processUtils.TestWorker(ctx, port, 2*time.Second)
+		err = processHelpers.TestWorker(ctx, port, 2*time.Second)
 		testWorkerDuration := time.Since(startTime)
 		if err != nil {
-			log.Errorf("Error connecting to worker: %v\n", err)
-			c.Status(fiber.StatusInternalServerError)
+			log.Printf("Error connecting to worker: %v\n", err)
 			err := cmd.Process.Kill()
 			if err != nil {
-				log.Errorf("Error killing worker: %v\n", err)
+				log.Printf("Error killing worker: %v\n", err)
 			}
-			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{"msg": "Error connecting to worker"})
+			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error connecting to worker")
+			return
 		}
-		log.Infof("Started worker on port: %d\n", port)
+		log.Printf("Started worker on port: %d\n", port)
 		workerId := uuid.New()
 		workerMap[workerId.String()] = &WorkerInfo{
 			Process: cmd,
 			Port:    port,
 		}
 		// Add timing metrics
-		c.Set("Server-Timing", fmt.Sprintf("spawn-time;dur=%.2f, check-time;dur=%.2f", spawnerDuration.Seconds()*1000.0, testWorkerDuration.Seconds()*1000.0))
-		return c.JSON(&fiber.Map{"port": port, "workerId": workerId.String()})
+		w.Header().Set("Server-Timing", fmt.Sprintf("spawn-time;dur=%.2f, check-time;dur=%.2f", spawnerDuration.Seconds()*1000.0, testWorkerDuration.Seconds()*1000.0))
+		httpHelpers.WriteOutput(w, map[string]any{"port": port, "workerId": workerId.String()})
 	})
 
 	// List all workers
-	app.Get("/workers", func(c *fiber.Ctx) error {
+	r.Get("/workers", func(w http.ResponseWriter, r *http.Request) {
 		// return empty array if no workers
 		if len(workerMap) == 0 {
-			return c.JSON([]string{})
+			httpHelpers.WriteOutput(w, []string{})
+			return
 		}
 
 		var workerIds []string
 		for key := range workerMap {
 			workerIds = append(workerIds, key)
 		}
-		return c.JSON(workerIds)
+		httpHelpers.WriteOutput(w, workerIds)
 	})
 
-	// List details of a specific worker
-	app.Get("/worker/:id", func(c *fiber.Ctx) error {
-		workerId := c.Params("id")
+	// Get details of a specific worker
+	r.Get("/worker/{id}", func(w http.ResponseWriter, r *http.Request) {
+		workerId := chi.URLParam(r, "id")
 		info := workerMap[workerId]
 		if info == nil {
-			return c.Status(fiber.StatusNotFound).JSON(&fiber.Map{"msg": "Worker not found"})
+			httpHelpers.WriteError(w, http.StatusNotFound, "Worker not found")
+			return
 		}
 
 		alive := info.Process.ProcessState == nil
 
-		output := fiber.Map{
+		output := map[string]any{
 			"port":     info.Port,
 			"workerId": workerId,
 			"pid":      info.Process.Process.Pid,
@@ -109,26 +113,27 @@ func main() {
 		} else {
 			isReachable := true
 			start := time.Now()
-			err := processUtils.TestWorker(ctx, info.Port, 1*time.Second)
+			err := processHelpers.TestWorker(ctx, info.Port, 1*time.Second)
 			elapsed := time.Since(start)
 			if err != nil {
-				log.Errorf("Error connecting to worker: %v\n", err)
+				log.Printf("Error connecting to worker: %v\n", err)
 				isReachable = false
 			} else {
-				c.Set("Server-Timing", fmt.Sprintf("check-time;dur=%.2f", elapsed.Seconds()*1000.0))
+				w.Header().Set("Server-Timing", fmt.Sprintf("check-time;dur=%.2f", elapsed.Seconds()*1000.0))
 			}
 			output["isReachable"] = isReachable
 		}
 
-		return c.JSON(output)
+		httpHelpers.WriteOutput(w, output)
 	})
 
 	// Stop a specific worker
-	app.Delete("/worker/:id", func(c *fiber.Ctx) error {
-		workerId := c.Params("id")
+	r.Delete("/worker/{id}", func(w http.ResponseWriter, r *http.Request) {
+		workerId := chi.URLParam(r, "id")
 		info := workerMap[workerId]
 		if info == nil {
-			return c.Status(fiber.StatusNotFound).JSON(&fiber.Map{"msg": "Worker not found"})
+			httpHelpers.WriteError(w, http.StatusNotFound, "Worker not found")
+			return
 		}
 
 		start := time.Now()
@@ -136,14 +141,20 @@ func main() {
 		elapsed := time.Since(start)
 
 		if err != nil {
-			log.Errorf("Error stopping worker: %v\n", err)
-			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{"msg": "Error stopping worker"})
+			log.Printf("Error stopping worker: %v\n", err)
+			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error stopping worker")
+			return
 		}
 		delete(workerMap, workerId)
 
-		c.Set("Server-Timing", fmt.Sprintf("stop-time;dur=%.2f", elapsed.Seconds()*1000.0))
-		return c.JSON(&fiber.Map{"msg": "Worker stopped"})
+		w.Header().Set("Server-Timing", fmt.Sprintf("stop-time;dur=%.2f", elapsed.Seconds()*1000.0))
+		httpHelpers.WriteOutput(w, map[string]any{"msg": "Worker stopped"})
 	})
 
-	log.Fatal(app.Listen(fmt.Sprintf(":%d", *port)))
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", *port),
+		Handler: r,
+	}
+
+	log.Fatal(server.ListenAndServe())
 }
