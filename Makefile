@@ -33,6 +33,7 @@ modernize:
 .PHONY: proto
 proto:
 	./scripts/build-proto.sh
+	./scripts/build-carta-proto.sh
 
 ## services: 📦 Compile services
 .PHONY: services

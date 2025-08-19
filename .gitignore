@@ -4,6 +4,9 @@
 # Generated gRPC code
 /pkg/grpc/*.pb.go
 
+# Generated carta-protobuf code
+/pkg/cartaDefinitions/*.pb.go
+
 # Build artifacts
 /build/*
 

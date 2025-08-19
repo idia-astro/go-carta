@@ -1,20 +1,21 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/proto"
 
+	"idia-astro/go-carta/pkg/cartaDefinitions"
 	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
-	"idia-astro/go-carta/services/controller/internal/cartaHelpers/types"
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
-func HandleRegisterViewerMessage(msg cartaHelpers.CartaActionMessage, conn *websocket.Conn, spawnerAddress string) (*spawnerHelpers.WorkerInfo, error) {
-	payload := cartaHelpers.RegisterViewerMessage{}
-	err := json.Unmarshal(msg.Payload, &payload)
+func HandleRegisterViewerMessage(msg []byte, requestId uint32, conn *websocket.Conn, spawnerAddress string) (*spawnerHelpers.WorkerInfo, error) {
+	// unmarshal the message payload to a RegisterViewerMessage
+	var payload cartaDefinitions.RegisterViewer
+	err := proto.Unmarshal(msg, &payload)
 
 	if err != nil {
 		return nil, err
@@ -27,27 +28,20 @@ func HandleRegisterViewerMessage(msg cartaHelpers.CartaActionMessage, conn *webs
 
 	log.Printf("Worker %s started for session %v and is available at %s:%d", info.WorkerId, payload.SessionId, info.Address, info.Port)
 
-	responsePayload := cartaHelpers.RegisterViewerAckMessage{
+	ackResponse := cartaDefinitions.RegisterViewerAck{
 		SessionId:   payload.SessionId,
 		Success:     true,
-		SessionType: types.SessionTypeNew,
+		SessionType: cartaDefinitions.SessionType_NEW,
 	}
+	byteData, err := cartaHelpers.PrepareMessagePayload(&ackResponse, cartaDefinitions.EventType_REGISTER_VIEWER_ACK, requestId)
 
 	// TODO: This seems slightly non-idiomatic, because we're returning an error _and_ the info pointer,
 	// but this is needed in order to clean up the worker on exit
-
-	// TODO: We could use some generics here
-	byteData, err := json.Marshal(responsePayload)
 	if err != nil {
-		fmt.Println("Error marshaling data:", err)
 		return &info, err
 	}
 
-	err = conn.WriteJSON(cartaHelpers.CartaResponseMessage{
-		ResponseType: types.RegisterViewerAck,
-		Payload:      byteData,
-	})
-
+	err = conn.WriteMessage(websocket.BinaryMessage, byteData)
 	if err != nil {
 		return &info, err
 	}

@@ -1,0 +1,3 @@
+[submodule "proto/carta-protobuf"]
+	path = proto/carta-protobuf
+	url = https://github.com/CARTAvis/carta-protobuf
