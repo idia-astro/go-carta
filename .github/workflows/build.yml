@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
@@ -22,6 +24,6 @@ jobs:
           sudo apt-get update -y
           sudo apt install -y protoc-gen-go protoc-gen-go-grpc
       - name: Build gRPC files
-        run: ./scripts/build-proto.sh
+        run: make proto
       - name: Build services
-        run: ./scripts/build-services.sh
+        run: make services
