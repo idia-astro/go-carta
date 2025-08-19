@@ -29,7 +29,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func echo(w http.ResponseWriter, r *http.Request) {
+func wsHandler(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
@@ -52,7 +52,7 @@ func echo(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Shut down worker with UUID: %s", workerInfo.WorkerId)
 	}()
 
-	// Placeholder echo server based on gorilla/websocket example
+	// Basic handler based on gorilla/websocket example
 	for {
 		messageType, message, err := c.ReadMessage()
 		if err != nil {
@@ -117,6 +117,6 @@ func main() {
 	id := uuid.New()
 	log.Printf("Starting controller with UUID: %s\n", id.String())
 
-	http.HandleFunc("/carta", echo)
+	http.HandleFunc("/carta", wsHandler)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", *hostname, *port), nil))
 }
