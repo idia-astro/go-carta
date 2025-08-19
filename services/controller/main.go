@@ -88,7 +88,7 @@ func echo(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Not implemented yet: %s (request id: %d)", prefix.EventType, prefix.RequestId)
 		case cartaDefinitions.EventType_EMPTY_EVENT:
 			if workerInfo == nil {
-				// TODO: send error
+				log.Println("Ignoring status request received before worker registration")
 				break
 			}
 			status, err := spawnerHelpers.GetWorkerStatus(workerInfo.WorkerId, *spawnerAddress)
@@ -97,7 +97,6 @@ func echo(w http.ResponseWriter, r *http.Request) {
 			} else {
 				log.Printf("Worker status: Alive: %v, Reachable: %v", status.Alive, status.IsReachable)
 			}
-			break
 		default:
 			log.Printf("Ignoring unknown action type: %s (request id: %d)", prefix.EventType, prefix.RequestId)
 		}
