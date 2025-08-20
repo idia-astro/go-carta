@@ -12,9 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"idia-astro/go-carta/pkg/shared"
 	"idia-astro/go-carta/services/spawner/internal/httpHelpers"
 	"idia-astro/go-carta/services/spawner/internal/processHelpers"
 )
@@ -39,6 +42,21 @@ func main() {
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	apiClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		panic(err)
+	}
+	defer helpers.CloseOrLog(apiClient)
+
+	containers, err := apiClient.ContainerList(context.Background(), container.ListOptions{All: true})
+	if err != nil {
+		panic(err)
+	}
+
+	for _, ctr := range containers {
+		fmt.Printf("%s %s (status: %s)\n", ctr.ID, ctr.Image, ctr.Status)
+	}
 
 	workerMap := make(map[string]*WorkerInfo)
 
