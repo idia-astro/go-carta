@@ -12,19 +12,27 @@ import (
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
-func HandleRegisterViewerMessage(msg []byte, requestId uint32, conn *websocket.Conn, spawnerAddress string) (*spawnerHelpers.WorkerInfo, error) {
+func HandleRegisterViewerMessage(conn *websocket.Conn, workerInfo *spawnerHelpers.WorkerInfo, requestId uint32, msg []byte, spawnerAddress string) error {
+	// Cant re-register viewer again
+	if workerInfo.WorkerId != "" {
+		return fmt.Errorf("viewer already registered")
+	}
+
 	// unmarshal the message payload to a RegisterViewerMessage
 	var payload cartaDefinitions.RegisterViewer
 	err := proto.Unmarshal(msg, &payload)
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	info, err := spawnerHelpers.RequestWorkerStartup(spawnerAddress)
 	if err != nil {
-		return nil, fmt.Errorf("error starting worker: %v", err)
+		return fmt.Errorf("error starting worker: %v", err)
 	}
+	workerInfo.WorkerId = info.WorkerId
+	workerInfo.Address = info.Address
+	workerInfo.Port = info.Port
 
 	log.Printf("Worker %s started for session %v and is available at %s:%d", info.WorkerId, payload.SessionId, info.Address, info.Port)
 
@@ -35,16 +43,15 @@ func HandleRegisterViewerMessage(msg []byte, requestId uint32, conn *websocket.C
 	}
 	byteData, err := cartaHelpers.PrepareMessagePayload(&ackResponse, cartaDefinitions.EventType_REGISTER_VIEWER_ACK, requestId)
 
-	// TODO: This seems slightly non-idiomatic, because we're returning an error _and_ the info pointer,
 	// but this is needed in order to clean up the worker on exit
 	if err != nil {
-		return &info, err
+		return err
 	}
 
 	err = conn.WriteMessage(websocket.BinaryMessage, byteData)
 	if err != nil {
-		return &info, err
+		return err
 	}
 
-	return &info, nil
+	return nil
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/pkg/cartaDefinitions"
 	"idia-astro/go-carta/pkg/shared"
 	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
 	"idia-astro/go-carta/services/controller/internal/handlers"
@@ -38,11 +37,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Client connected")
 	defer helpers.CloseOrLog(c)
 
-	var workerInfo *spawnerHelpers.WorkerInfo = nil
+	var workerInfo = spawnerHelpers.WorkerInfo{}
 
 	// Close worker on exit if it exists
 	defer func() {
-		if workerInfo == nil {
+		if workerInfo.WorkerId == "" {
 			return
 		}
 		err := spawnerHelpers.RequestWorkerShutdown(workerInfo.WorkerId, *spawnerAddress)
@@ -81,24 +80,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Failed to unmarshal message: %v\n", err)
 		}
 
-		switch prefix.EventType {
-		case cartaDefinitions.EventType_REGISTER_VIEWER:
-			workerInfo, err = handlers.HandleRegisterViewerMessage(message[8:], prefix.RequestId, c, *spawnerAddress)
-		case cartaDefinitions.EventType_FILE_LIST_REQUEST, cartaDefinitions.EventType_FILE_INFO_REQUEST, cartaDefinitions.EventType_OPEN_FILE:
-			log.Printf("Not implemented yet: %s (request id: %d)", prefix.EventType, prefix.RequestId)
-		case cartaDefinitions.EventType_EMPTY_EVENT:
-			if workerInfo == nil {
-				log.Println("Ignoring status request received before worker registration")
-				break
-			}
-			status, err := spawnerHelpers.GetWorkerStatus(workerInfo.WorkerId, *spawnerAddress)
-			if err != nil {
-				log.Printf("Error getting worker status: %v", err)
-			} else {
-				log.Printf("Worker status: Alive: %v, Reachable: %v", status.Alive, status.IsReachable)
-			}
-		default:
-			log.Printf("Ignoring unknown action type: %s (request id: %d)", prefix.EventType, prefix.RequestId)
+		handler, ok := handlers.HandlerMap[prefix.EventType]
+		if !ok {
+			log.Printf("Unsupported message type: %s (request id: %d)", prefix.EventType, prefix.RequestId)
+			break
+		} else {
+			err = handler(c, &workerInfo, prefix.RequestId, message[8:], *spawnerAddress)
 		}
 
 		if err != nil {
