@@ -16,6 +16,7 @@ var HandlerMap = map[cartaDefinitions.EventType]Handler{
 	cartaDefinitions.EventType_REGISTER_VIEWER:   HandleRegisterViewerMessage,
 	cartaDefinitions.EventType_FILE_LIST_REQUEST: HandleNotImplementedMessage,
 	cartaDefinitions.EventType_FILE_INFO_REQUEST: HandleNotImplementedMessage,
+	cartaDefinitions.EventType_STOP_FILE_LIST:    HandleNotImplementedMessage,
 	cartaDefinitions.EventType_EMPTY_EVENT:       HandleStatusMessage,
 }
 

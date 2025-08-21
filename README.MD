@@ -31,10 +31,13 @@ Tested with:
 TODO, would need to install `libcfitsio-dev` (ubuntu) or `cfitsio` (macOS homebrew)
 
 ## Build
-
+Ensure the carta-protobuf` submodule is initialised:
+```shell
+git submodule update --init
+```
 gRPC files need to be built first, followed by the services. Use the provided Makefile:
 
-```bash
+```shell
 # From the project root
 make proto     # Build gRPC protobuf files
 make services  # Build all services
