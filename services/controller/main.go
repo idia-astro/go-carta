@@ -37,18 +37,22 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Client connected")
 	defer helpers.CloseOrLog(c)
 
-	var workerInfo = spawnerHelpers.WorkerInfo{}
+	var sessionContext = spawnerHelpers.SessionContext{}
 
 	// Close worker on exit if it exists
 	defer func() {
-		if workerInfo.WorkerId == "" {
+		if sessionContext.Info.WorkerId == "" {
 			return
 		}
-		err := spawnerHelpers.RequestWorkerShutdown(workerInfo.WorkerId, *spawnerAddress)
+		if sessionContext.WorkerConn != nil {
+			helpers.CloseOrLog(sessionContext.WorkerConn)
+		}
+
+		err := spawnerHelpers.RequestWorkerShutdown(sessionContext.Info.WorkerId, *spawnerAddress)
 		if err != nil {
 			log.Printf("Error shutting down worker: %v", err)
 		}
-		log.Printf("Shut down worker with UUID: %s", workerInfo.WorkerId)
+		log.Printf("Shut down worker with UUID: %s", sessionContext.Info.WorkerId)
 	}()
 
 	// Basic handler based on gorilla/websocket example
@@ -85,7 +89,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Unsupported message type: %s (request id: %d)", prefix.EventType, prefix.RequestId)
 			break
 		} else {
-			err = handler(c, &workerInfo, prefix.RequestId, message[8:], *spawnerAddress)
+			err = handler(c, &sessionContext, prefix.RequestId, message[8:])
 		}
 
 		if err != nil {
