@@ -1,7 +1,6 @@
 package main
 
-// #cgo CFLAGS: -I/opt/homebrew/include/
-// #cgo LDFLAGS: -L/opt/homebrew/lib/ -lcfitsio
+// #cgo pkg-config: cfitsio
 // #include "test.h"
 // #include <stdio.h> // needed for fflush and stdout
 import "C"
