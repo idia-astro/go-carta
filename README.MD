@@ -34,7 +34,7 @@ Tested with:
 
 ### cfitsio
 
-TODO, would need to install `libcfitsio-dev` (ubuntu) or `cfitsio` (macOS homebrew)
+The worker service uses cgo to compile some simple functions that utilise cfitsio. Install `libcfitsio-dev` (ubuntu) or `cfitsio` (macOS homebrew).
 
 ## Build
 Ensure the carta-protobuf` submodule is initialised:
