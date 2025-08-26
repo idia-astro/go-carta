@@ -1,15 +1,12 @@
-package handlers
+package session
 
 import (
-	"github.com/gorilla/websocket"
-
 	"idia-astro/go-carta/pkg/cartaDefinitions"
-	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
-func HandleFileListRequest(conn *websocket.Conn, sessionContext *spawnerHelpers.SessionContext, requestId uint32, msg []byte) error {
+func (s *Session) handleFileListRequest(requestId uint32, msg []byte) error {
 	var payload cartaDefinitions.FileListRequest
-	err := CheckAndParse(&payload, sessionContext, requestId, msg)
+	err := s.checkAndParse(&payload, requestId, msg)
 
 	if err != nil {
 		return err
@@ -29,5 +26,5 @@ func HandleFileListRequest(conn *websocket.Conn, sessionContext *spawnerHelpers.
 		Subdirectories: []*cartaDefinitions.DirectoryInfo{&subDir},
 	}
 
-	return SendMessage(conn, &resp, cartaDefinitions.EventType_FILE_LIST_RESPONSE, requestId)
+	return s.sendMessage(&resp, cartaDefinitions.EventType_FILE_LIST_RESPONSE, requestId)
 }

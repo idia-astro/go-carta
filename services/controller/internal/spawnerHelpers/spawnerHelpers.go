@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 
-	"google.golang.org/grpc"
-
 	"idia-astro/go-carta/pkg/shared"
 )
 
@@ -28,12 +26,6 @@ type WorkerStatus struct {
 	Alive         bool `json:"alive"`
 	IsReachable   bool `json:"isReachable"`
 	ExitedCleanly bool `json:"exitedCleanly"`
-}
-
-type SessionContext struct {
-	Info           WorkerInfo
-	SpawnerAddress string
-	WorkerConn     *grpc.ClientConn
 }
 
 func CountWorkers(spawnerAddress string) (int, error) {

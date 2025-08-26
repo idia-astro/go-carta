@@ -10,9 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"idia-astro/go-carta/pkg/shared"
-	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
-	"idia-astro/go-carta/services/controller/internal/handlers"
-	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
+	"idia-astro/go-carta/services/controller/internal/session"
 )
 
 var (
@@ -37,23 +35,13 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Client connected")
 	defer helpers.CloseOrLog(c)
 
-	var sessionContext = spawnerHelpers.SessionContext{}
+	s := session.Session{
+		SpawnerAddress: *spawnerAddress,
+		WebSocket:      c,
+	}
 
 	// Close worker on exit if it exists
-	defer func() {
-		if sessionContext.Info.WorkerId == "" {
-			return
-		}
-		if sessionContext.WorkerConn != nil {
-			helpers.CloseOrLog(sessionContext.WorkerConn)
-		}
-
-		err := spawnerHelpers.RequestWorkerShutdown(sessionContext.Info.WorkerId, *spawnerAddress)
-		if err != nil {
-			log.Printf("Error shutting down worker: %v", err)
-		}
-		log.Printf("Shut down worker with UUID: %s", sessionContext.Info.WorkerId)
-	}()
+	defer s.HandleDisconnect()
 
 	// Basic handler based on gorilla/websocket example
 	for {
@@ -78,20 +66,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Message prefix is used for determining message type and matching requests to responses
-		prefix, err := cartaHelpers.DecodeMessagePrefix(message)
-		if err != nil {
-			log.Printf("Failed to unmarshal message: %v\n", err)
-		}
-
-		handler, ok := handlers.HandlerMap[prefix.EventType]
-		if !ok {
-			log.Printf("Unsupported message type: %s (request id: %d)", prefix.EventType, prefix.RequestId)
-			break
-		} else {
-			err = handler(c, &sessionContext, prefix.RequestId, message[8:])
-		}
-
+		err = s.HandleMessage(message)
 		if err != nil {
 			log.Printf("Error handling message: %v", err)
 			break
