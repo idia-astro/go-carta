@@ -4,6 +4,7 @@ import (
 	"fmt"
 	helpers "idia-astro/go-carta/pkg/shared"
 	"log"
+	"sync"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
@@ -19,6 +20,7 @@ type Session struct {
 	SpawnerAddress string
 	WorkerConn     *grpc.ClientConn
 	WebSocket      *websocket.Conn
+	sendMutex      sync.Mutex
 }
 
 var handlerMap = map[cartaDefinitions.EventType]func(*Session, uint32, []byte) error{
@@ -58,6 +60,8 @@ func (s *Session) sendMessage(msg proto.Message, eventType cartaDefinitions.Even
 	if err != nil {
 		return err
 	}
+	s.sendMutex.Lock()
+	defer s.sendMutex.Unlock()
 	return s.WebSocket.WriteMessage(websocket.BinaryMessage, byteData)
 }
 

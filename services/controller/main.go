@@ -66,11 +66,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		err = s.HandleMessage(message)
-		if err != nil {
-			log.Printf("Error handling message: %v", err)
-			break
-		}
+		go func() {
+			err := s.HandleMessage(message)
+			if err != nil {
+				log.Printf("Failed to handle message: %v\n", err)
+			}
+		}()
 	}
 
 	// defer should shut down the worker afterwards
