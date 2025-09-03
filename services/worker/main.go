@@ -35,8 +35,6 @@ func main() {
 	}
 	defer utils.CloseOrLog(listener)
 
-	testFits("/Users/angus/cubes/m42.fits")
-
 	id := uuid.New()
 	log.Printf("Starting worker with instance ID: %s\n", id.String())
 

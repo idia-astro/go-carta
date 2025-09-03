@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -17,6 +19,7 @@ var (
 	port           = flag.Int("port", 8081, "TCP server port")
 	hostname       = flag.String("hostname", "", "Hostname to listen on")
 	spawnerAddress = flag.String("spawnerAddress", "http://localhost:8080", "Address of the process spawner")
+	baseFolder     = flag.String("baseFolder", "", "Base folder to use")
 )
 
 var upgrader = websocket.Upgrader{
@@ -37,6 +40,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	s := session.Session{
 		SpawnerAddress: *spawnerAddress,
+		BaseFolder:     *baseFolder,
 		WebSocket:      c,
 	}
 
@@ -83,6 +87,18 @@ func main() {
 
 	id := uuid.New()
 	log.Printf("Starting controller with UUID: %s\n", id.String())
+
+	// Get
+	if len(strings.TrimSpace(*baseFolder)) == 0 {
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			dirname = "/"
+		}
+		err = flag.Set("baseFolder", dirname)
+		if err != nil {
+			log.Fatalf("Failed to set --baseFolder: %v\n", err)
+		}
+	}
 
 	http.HandleFunc("/carta", wsHandler)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", *hostname, *port), nil))

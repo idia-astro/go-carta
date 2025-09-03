@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "basic.proto";
 import "files.proto";
-import "enums.proto";
+import "grpc_enums.proto";
 
 package cartaProto;
 option go_package = "./cartaProto";

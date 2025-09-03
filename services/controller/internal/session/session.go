@@ -18,6 +18,7 @@ import (
 type Session struct {
 	Info           spawnerHelpers.WorkerInfo
 	SpawnerAddress string
+	BaseFolder     string
 	WorkerConn     *grpc.ClientConn
 	WebSocket      *websocket.Conn
 	sendMutex      sync.Mutex

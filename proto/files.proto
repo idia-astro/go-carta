@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "enums.proto";
+import "grpc_enums.proto";
 
 package cartaProto;
 option go_package = "./cartaProto";
