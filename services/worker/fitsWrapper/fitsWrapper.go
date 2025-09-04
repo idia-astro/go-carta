@@ -75,11 +75,6 @@ func (f *FitsFile) ReadHeader(i int) (string, error) {
 
 	n, err := f.GetNumHeaderKeys()
 
-	// for (ii = 1; ii <= nkeys; ii++)  {
-	//      fits_read_record(fptr, ii, card, &status); /* read keyword */
-	//      printf("%s\n", card);
-	//    }
-
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %d", n)
 	}
