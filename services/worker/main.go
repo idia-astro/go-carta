@@ -11,6 +11,7 @@ import (
 
 	pb "idia-astro/go-carta/pkg/grpc"
 	utils "idia-astro/go-carta/pkg/shared"
+	"idia-astro/go-carta/services/worker/fitsWrapper"
 )
 
 var (
@@ -28,7 +29,7 @@ type fileListServer struct {
 
 func main() {
 	flag.Parse()
-
+	fitsWrapper.TestWrapper("/Users/angus/cubes/m422.fits")
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
