@@ -165,10 +165,33 @@ func main() {
 		httpHelpers.WriteOutput(w, map[string]any{"msg": "Worker stopped"})
 	})
 
+
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", *hostname, *port),
 		Handler: r,
+		}		
+
+	// Run server in background
+	go func() {
+		log.Printf("Starting server on %s:%d\n", hostname, port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("ListenAndServe error: %v", err)
+		}
+	}()
+
+	// Wait for interrupt
+	// Wonder if we should fist wait to be sure that the amove go
+	// routine has started?
+	<-ctx.Done()
+	log.Println("Signal received, shutting down...")
+
+	// Give outstanding requests 5 seconds to finish
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	log.Fatal(server.ListenAndServe())
+	log.Println("Server exited gracefully")
 }
