@@ -171,9 +171,10 @@ func main() {
 		Handler: r,
 		}		
 
+		log.Printf("Starting spawner 1 on %s:%d\n", *hostname, *port)	
 	// Run server in background
 	go func() {
-		log.Printf("Starting server on %s:%d\n", hostname, port)
+		log.Printf("Starting spawner on %s:%d\n", *hostname, *port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("ListenAndServe error: %v", err)
 		}
@@ -187,11 +188,12 @@ func main() {
 
 	// Give outstanding requests 5 seconds to finish
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Fatalf("Spawnder forced to shutdown: %v", err)
 	}
 
-	log.Println("Server exited gracefully")
+	<-shutdownCtx.Done()
+
+	log.Println("Spawner exited gracefully")
+	cancel()
 }
