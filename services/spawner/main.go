@@ -181,19 +181,43 @@ func main() {
 	}()
 
 	// Wait for interrupt
-	// Wonder if we should fist wait to be sure that the amove go
-	// routine has started?
 	<-ctx.Done()
 	log.Println("Signal received, shutting down...")
 
-	// Give outstanding requests 5 seconds to finish
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Spawnder forced to shutdown: %v", err)
+	for id, w := range workerMap {
+		// If the worker is not running, skip it
+		if w.Process != nil && w.Process.Process != nil {
+			// First try a graceful shutdown
+			w.Process.Process.Signal(syscall.SIGTERM)
+
+			// Wait for it to exit
+			done := make(chan error, 1)
+			go func() { done <- w.Process.Wait() }()
+
+			select {
+			case err := <-done:
+				fmt.Printf("process exited: %v\n", err)
+			case <-time.After(5 * time.Second):
+				fmt.Println("timeout, force killing")
+				w.Process.Process.Kill()
+				<-done // wait again to reap zombie
+			}
+		}
+		delete(workerMap, id)
 	}
 
-	<-shutdownCtx.Done()
+	// Shutdown the HTTP server
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("HTTP server Shutdown error: %v", err)
+	} else {
+		log.Println("HTTP server shut down gracefully")
+	}
+	cancel()
+	
+	// Wait a moment to ensure all logs are printed before exiting
+	time.Sleep(1 * time.Second)
 
 	log.Println("Spawner exited gracefully")
-	cancel()
 }
