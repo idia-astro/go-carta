@@ -188,7 +188,7 @@ func main() {
 		// If the worker is not running, skip it
 		if w.Process != nil && w.Process.Process != nil {
 			// First try a graceful shutdown
-			w.Process.Process.Signal(syscall.SIGTERM)
+
 
 			// Wait for it to exit
 			done := make(chan error, 1)
@@ -199,7 +199,9 @@ func main() {
 				fmt.Printf("process exited: %v\n", err)
 			case <-time.After(5 * time.Second):
 				fmt.Println("timeout, force killing")
-				w.Process.Process.Kill()
+				if err := w.Process.Process.Kill(); err != nil {
+					log.Printf("Error force killing process: %v\n", err)
+				}
 				<-done // wait again to reap zombie
 			}
 		}
