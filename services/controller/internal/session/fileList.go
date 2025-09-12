@@ -45,8 +45,6 @@ var multiSlash = regexp.MustCompile(`/+`)
 func (s *Session) handleFileListRequest(requestId uint32, msg []byte) error {
 	var payload cartaDefinitions.FileListRequest
 
-	log.Printf("Received FileListRequest: %s", string(msg))
-
 	err := s.checkAndParse(&payload, requestId, msg)
 
 	if err != nil {
@@ -58,19 +56,18 @@ func (s *Session) handleFileListRequest(requestId uint32, msg []byte) error {
 	rpcCtx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
 	defer cancel()
 
-	log.Printf("Handling FileListRequest for path: %s", payload.Directory)
+	// Replace $BASE with the actual base folder
+	// Ensure path starts and ends with a single slash
 	path := strings.Replace(payload.Directory, "$BASE", s.BaseFolder, 1)
-	log.Printf("Resolved path: %s", path)
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
 	if !strings.HasSuffix(path, "/") {
 		path = path + "/"
 	}
-
-	path = strings.ReplaceAll(path, "//", "/")
-
-	log.Printf("Fixed path: %s", path)
+	//path = strings.ReplaceAll(path, "//", "/")
+	path = multiSlash.ReplaceAllString(path, "/")
+	log.Printf("Requesting file list for path: %s", path)
 
 	rpcResp, err := client.GetFileList(rpcCtx, &cartaProto.FileListRequest{Path: path, IgnoreHidden: true})
 
@@ -87,9 +84,6 @@ func (s *Session) handleFileListRequest(requestId uint32, msg []byte) error {
 	}
 
 	for _, file := range rpcResp.Files {
-		log.Printf("RPC file type: %s", file.Type)
-		log.Printf("Found file: %s (dir: %v)", file.Name, file.IsDirectory)
-		log.Printf("SYMLINK CHECK: is %s a symlink to dir? %v", file.Name, isSymlinkToDir(path, file.Name))
 		if file.IsDirectory || isSymlinkToDir(path, file.Name) {
 			subDir := cartaDefinitions.DirectoryInfo{
 				Name:      file.Name,
