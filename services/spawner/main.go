@@ -35,7 +35,7 @@ func main() {
 	flag.Parse()
 
 	id := uuid.New()
-	fmt.Printf("Started spawner with UUID: %s\n", id.String())
+	log.Printf("Started spawner with UUID: %s\n", id.String())
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -198,9 +198,9 @@ func main() {
 
 			select {
 			case err := <-done:
-				fmt.Printf("process exited: %v\n", err)
+				log.Printf("process exited: %v\n", err)
 			case <-time.After(5 * time.Second):
-				fmt.Println("timeout, force killing")
+				log.Println("timeout, force killing")
 				if err := w.Process.Process.Kill(); err != nil {
 					log.Printf("Error force killing process: %v\n", err)
 				}
