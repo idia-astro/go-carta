@@ -170,8 +170,6 @@ func main() {
 		Addr:    fmt.Sprintf("%s:%d", *hostname, *port),
 		Handler: r,
 		}		
-
-		log.Printf("Starting spawner 1 on %s:%d\n", *hostname, *port)	
 	// Run server in background
 	go func() {
 		log.Printf("Starting spawner on %s:%d\n", *hostname, *port)
@@ -188,7 +186,11 @@ func main() {
 		// If the worker is not running, skip it
 		if w.Process != nil && w.Process.Process != nil {
 			// First try a graceful shutdown
-
+			err := w.Process.Process.Signal(syscall.SIGTERM)
+			if err != nil {
+				log.Printf("Error sending SIGTERM to process: %v\n", err)
+				continue
+			}
 
 			// Wait for it to exit
 			done := make(chan error, 1)
