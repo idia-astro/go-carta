@@ -35,7 +35,7 @@ func main() {
 	flag.Parse()
 
 	id := uuid.New()
-	fmt.Printf("Started spawner with UUID: %s\n", id.String())
+	log.Printf("Started spawner with UUID: %s\n", id.String())
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -165,10 +165,63 @@ func main() {
 		httpHelpers.WriteOutput(w, map[string]any{"msg": "Worker stopped"})
 	})
 
+
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", *hostname, *port),
 		Handler: r,
+		}		
+	// Run server in background
+	go func() {
+		log.Printf("Starting spawner on %s:%d\n", *hostname, *port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("ListenAndServe error: %v", err)
+		}
+	}()
+
+	// Wait for interrupt
+	<-ctx.Done()
+	log.Println("Signal received, shutting down...")
+
+	for id, w := range workerMap {
+		// If the worker is not running, skip it
+		if w.Process != nil && w.Process.Process != nil {
+			// First try a graceful shutdown
+			err := w.Process.Process.Signal(syscall.SIGTERM)
+			if err != nil {
+				log.Printf("Error sending SIGTERM to process: %v\n", err)
+				continue
+			}
+
+			// Wait for it to exit
+			done := make(chan error, 1)
+			go func() { done <- w.Process.Wait() }()
+
+			select {
+			case err := <-done:
+				log.Printf("process exited: %v\n", err)
+			case <-time.After(5 * time.Second):
+				log.Println("timeout, force killing")
+				if err := w.Process.Process.Kill(); err != nil {
+					log.Printf("Error force killing process: %v\n", err)
+				}
+				<-done // wait again to reap zombie
+			}
+		}
+		delete(workerMap, id)
 	}
 
-	log.Fatal(server.ListenAndServe())
+	// Shutdown the HTTP server
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("HTTP server Shutdown error: %v", err)
+	} else {
+		log.Println("HTTP server shut down gracefully")
+	}
+	cancel()
+	
+	// Wait a moment to ensure all logs are printed before exiting
+	time.Sleep(1 * time.Second)
+
+	log.Println("Spawner exited gracefully")
 }
