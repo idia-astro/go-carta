@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"log"
+	"os"
+	"path/filepath"
+	"regexp"
 
 	"idia-astro/go-carta/pkg/cartaDefinitions"
 	cartaProto "idia-astro/go-carta/pkg/grpc"
@@ -12,11 +16,39 @@ import (
 
 var timeoutDuration = time.Second * 5
 
+// isSymlinkToDir reports whether name in baseDir is a symlink pointing to a directory.
+func isSymlinkToDir(baseDir, name string) bool {
+	full := filepath.Join(baseDir, name)
+
+	fi, err := os.Lstat(full)
+	if err != nil {
+		return false
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+
+	target, err := filepath.EvalSymlinks(full)
+	if err != nil {
+		return false
+	}
+
+	tfi, err := os.Stat(target)
+	if err != nil {
+		return false
+	}
+	return tfi.IsDir()
+}
+
+var multiSlash = regexp.MustCompile(`/+`)
+
 func (s *Session) handleFileListRequest(requestId uint32, msg []byte) error {
 	var payload cartaDefinitions.FileListRequest
+
 	err := s.checkAndParse(&payload, requestId, msg)
 
 	if err != nil {
+		log.Printf("Error parsing FileListRequest: %v", err)
 		return err
 	}
 
@@ -24,10 +56,18 @@ func (s *Session) handleFileListRequest(requestId uint32, msg []byte) error {
 	rpcCtx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
 	defer cancel()
 
+	// Replace $BASE with the actual base folder
+	// Ensure path starts and ends with a single slash
 	path := strings.Replace(payload.Directory, "$BASE", s.BaseFolder, 1)
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
+	if !strings.HasSuffix(path, "/") {
+		path = path + "/"
+	}
+	//path = strings.ReplaceAll(path, "//", "/")
+	path = multiSlash.ReplaceAllString(path, "/")
+	log.Printf("Requesting file list for path: %s", path)
 
 	rpcResp, err := client.GetFileList(rpcCtx, &cartaProto.FileListRequest{Path: path, IgnoreHidden: true})
 
@@ -44,7 +84,7 @@ func (s *Session) handleFileListRequest(requestId uint32, msg []byte) error {
 	}
 
 	for _, file := range rpcResp.Files {
-		if file.IsDirectory {
+		if file.IsDirectory || isSymlinkToDir(path, file.Name) {
 			subDir := cartaDefinitions.DirectoryInfo{
 				Name:      file.Name,
 				ItemCount: 0,
