@@ -65,7 +65,7 @@ func (s *Session) handleFileListRequest(requestId uint32, msg []byte) error {
 	if !strings.HasSuffix(path, "/") {
 		path = path + "/"
 	}
-	//path = strings.ReplaceAll(path, "//", "/")
+
 	path = multiSlash.ReplaceAllString(path, "/")
 	log.Printf("Requesting file list for path: %s", path)
 
