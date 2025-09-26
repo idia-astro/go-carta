@@ -27,7 +27,7 @@ type Session struct {
 var handlerMap = map[cartaDefinitions.EventType]func(*Session, uint32, []byte) error{
 	cartaDefinitions.EventType_REGISTER_VIEWER:   (*Session).handleRegisterViewerMessage,
 	cartaDefinitions.EventType_FILE_LIST_REQUEST: (*Session).handleFileListRequest,
-	cartaDefinitions.EventType_FILE_INFO_REQUEST: (*Session).handleNotImplementedMessage,
+	cartaDefinitions.EventType_FILE_INFO_REQUEST: (*Session).handleFileInfoRequest,
 	cartaDefinitions.EventType_STOP_FILE_LIST:    (*Session).handleNotImplementedMessage,
 	cartaDefinitions.EventType_EMPTY_EVENT:       (*Session).handleStatusMessage,
 }
