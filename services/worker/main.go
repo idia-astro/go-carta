@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 
 	pb "idia-astro/go-carta/pkg/grpc"
-	utils "idia-astro/go-carta/pkg/shared"
+	utils "idia-astro/go-carta/pkg/shared/helpers"
 	"idia-astro/go-carta/services/worker/fitsWrapper"
 )
 

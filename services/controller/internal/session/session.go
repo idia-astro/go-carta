@@ -2,7 +2,6 @@ package session
 
 import (
 	"fmt"
-	helpers "idia-astro/go-carta/pkg/shared"
 	"log"
 	"sync"
 
@@ -11,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"idia-astro/go-carta/pkg/cartaDefinitions"
+	"idia-astro/go-carta/pkg/shared/helpers"
 	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
