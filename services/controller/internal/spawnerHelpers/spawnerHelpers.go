@@ -1,13 +1,17 @@
 package spawnerHelpers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"regexp"
 
-	"idia-astro/go-carta/pkg/shared"
+	"idia-astro/go-carta/pkg/shared/defs"
+	"idia-astro/go-carta/pkg/shared/helpers"
 )
 
 type ErrorResponse struct {
@@ -100,7 +104,10 @@ func GetWorkerStatus(workerId string, spawnerAddress string) (WorkerStatus, erro
 }
 
 func RequestWorkerStartup(spawnerAddress string) (WorkerInfo, error) {
-	req, err := http.NewRequest(http.MethodPost, spawnerAddress, nil)
+	jsonBody, _ := json.Marshal(defs.WorkerSpawnBody{
+		Username: "angus",
+	})
+	req, err := http.NewRequest(http.MethodPost, spawnerAddress, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return WorkerInfo{}, err
 	}
@@ -154,4 +161,17 @@ func RequestWorkerShutdown(workerId string, spawnerAddress string) error {
 	}
 
 	return nil
+}
+
+func GetUsername(r *http.Request) (string, error) {
+	token := r.URL.Query().Get("token")
+	tokenRegex := regexp.MustCompile(`\?token=no_auth_configured$`)
+	token = tokenRegex.ReplaceAllString(token, "")
+	log.Printf("token: %v", token)
+
+	if token == "" {
+		return "", errors.New("no token provided")
+	}
+
+	return "", nil
 }
