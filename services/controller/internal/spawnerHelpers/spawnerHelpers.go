@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"idia-astro/go-carta/pkg/shared/defs"
 	"idia-astro/go-carta/pkg/shared/helpers"
 )
@@ -169,9 +171,25 @@ func GetUsername(r *http.Request) (string, error) {
 	token = tokenRegex.ReplaceAllString(token, "")
 	log.Printf("token: %v", token)
 
-	if token == "" {
-		return "", errors.New("no token provided")
+	parsedToken, err := jwt.ParseWithClaims(token, jwt.MapClaims{}, func(token *jwt.Token) (any, error) {
+		return []byte("mysigningsecret"), nil
+	})
+
+	if err != nil {
+		return "", err
 	}
 
-	return "", nil
+	var username string
+
+	if claims, ok := parsedToken.Claims.(jwt.MapClaims); ok {
+		test := claims["username"]
+		username = test.(string)
+		fmt.Println(username)
+		if username == "" {
+			return "", errors.New("no username in token")
+		}
+		return username, nil
+	} else {
+		return "", errors.New("could not parse token")
+	}
 }
