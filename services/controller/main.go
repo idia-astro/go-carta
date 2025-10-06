@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 	"log"
 	"net/http"
 	"os"
@@ -11,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/pkg/shared"
+	"idia-astro/go-carta/pkg/shared/helpers"
 	"idia-astro/go-carta/services/controller/internal/session"
 )
 
@@ -29,7 +30,15 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+var sessionMap = make(map[string]*session.Session)
+
 func wsHandler(w http.ResponseWriter, r *http.Request) {
+	username, err := spawnerHelpers.GetUsername(r)
+	if err != nil {
+		log.Print("Failed to get username:", err)
+		return
+	}
+
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
@@ -46,6 +55,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
+	sessionMap[username] = &s
 
 	// Basic handler based on gorilla/websocket example
 	for {

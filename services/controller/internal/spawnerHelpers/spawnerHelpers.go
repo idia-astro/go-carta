@@ -1,13 +1,19 @@
 package spawnerHelpers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"regexp"
 
-	"idia-astro/go-carta/pkg/shared"
+	"github.com/golang-jwt/jwt/v5"
+
+	"idia-astro/go-carta/pkg/shared/defs"
+	"idia-astro/go-carta/pkg/shared/helpers"
 )
 
 type ErrorResponse struct {
@@ -100,7 +106,10 @@ func GetWorkerStatus(workerId string, spawnerAddress string) (WorkerStatus, erro
 }
 
 func RequestWorkerStartup(spawnerAddress string) (WorkerInfo, error) {
-	req, err := http.NewRequest(http.MethodPost, spawnerAddress, nil)
+	jsonBody, _ := json.Marshal(defs.WorkerSpawnBody{
+		Username: "angus",
+	})
+	req, err := http.NewRequest(http.MethodPost, spawnerAddress, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return WorkerInfo{}, err
 	}
@@ -154,4 +163,33 @@ func RequestWorkerShutdown(workerId string, spawnerAddress string) error {
 	}
 
 	return nil
+}
+
+func GetUsername(r *http.Request) (string, error) {
+	token := r.URL.Query().Get("token")
+	tokenRegex := regexp.MustCompile(`\?token=no_auth_configured$`)
+	token = tokenRegex.ReplaceAllString(token, "")
+	log.Printf("token: %v", token)
+
+	parsedToken, err := jwt.ParseWithClaims(token, jwt.MapClaims{}, func(token *jwt.Token) (any, error) {
+		return []byte("mysigningsecret"), nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	var username string
+
+	if claims, ok := parsedToken.Claims.(jwt.MapClaims); ok {
+		test := claims["username"]
+		username = test.(string)
+		fmt.Println(username)
+		if username == "" {
+			return "", errors.New("no username in token")
+		}
+		return username, nil
+	} else {
+		return "", errors.New("could not parse token")
+	}
 }

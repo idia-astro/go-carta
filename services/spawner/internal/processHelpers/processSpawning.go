@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"idia-astro/go-carta/pkg/grpc"
-	"idia-astro/go-carta/pkg/shared"
+	"idia-astro/go-carta/pkg/shared/helpers"
 )
 
 // package-scope regex and parser for worker readiness log lines

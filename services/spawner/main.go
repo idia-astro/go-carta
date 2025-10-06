@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -15,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	sharedDefs "idia-astro/go-carta/pkg/shared/defs"
 	"idia-astro/go-carta/services/spawner/internal/httpHelpers"
 	"idia-astro/go-carta/services/spawner/internal/processHelpers"
 )
@@ -27,8 +30,9 @@ var (
 )
 
 type WorkerInfo struct {
-	Process *exec.Cmd
-	Port    int
+	Cmd      *exec.Cmd
+	Port     int
+	Username string
 }
 
 func main() {
@@ -46,6 +50,15 @@ func main() {
 
 	// Start a new worker
 	r.Post("/", func(w http.ResponseWriter, r *http.Request) {
+		var body sharedDefs.WorkerSpawnBody
+		err := json.NewDecoder(r.Body).Decode(&body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// TODO: Actual logic relating to spawning a worker as the specified user
+
 		startTime := time.Now()
 		cmd, port, err := processHelpers.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second)
 		spawnerDuration := time.Since(startTime)
@@ -70,8 +83,9 @@ func main() {
 		log.Printf("Started worker on port: %d\n", port)
 		workerId := uuid.New()
 		workerMap[workerId.String()] = &WorkerInfo{
-			Process: cmd,
-			Port:    port,
+			Username: body.Username,
+			Cmd:      cmd,
+			Port:     port,
 		}
 		httpHelpers.WriteTimings(w, httpHelpers.Timings{"spawn-time": spawnerDuration, "check-time": testWorkerDuration})
 
@@ -91,9 +105,14 @@ func main() {
 			return
 		}
 
-		var workerIds []string
-		for key := range workerMap {
-			workerIds = append(workerIds, key)
+		var workerIds []sharedDefs.WorkerListItem
+		for key, val := range workerMap {
+			workerIds = append(workerIds, sharedDefs.WorkerListItem{
+				WorkerId:  key,
+				ProcessId: val.Cmd.Process.Pid,
+				Username:  val.Username,
+				UserId:    val.Cmd.SysProcAttr.Credential.Uid,
+			})
 		}
 		httpHelpers.WriteOutput(w, workerIds)
 	})
@@ -112,18 +131,21 @@ func main() {
 			workerHostname = "localhost"
 		}
 
-		alive := info.Process.ProcessState == nil
+		alive := info.Cmd.ProcessState == nil
 
-		output := map[string]any{
-			"port":     info.Port,
-			"address":  workerHostname,
-			"workerId": workerId,
-			"pid":      info.Process.Process.Pid,
-			"alive":    alive,
+		output := sharedDefs.WorkerStatus{
+			WorkerInfo: sharedDefs.WorkerInfo{
+				Port:      info.Port,
+				Address:   workerHostname,
+				WorkerId:  workerId,
+				UserId:    info.Cmd.SysProcAttr.Credential.Uid,
+				ProcessId: info.Cmd.Process.Pid,
+			},
+			Alive: alive,
 		}
 
 		if !alive {
-			output["exitedCleanly"] = info.Process.ProcessState != nil && info.Process.ProcessState.Success()
+			output.ExitedCleanly = info.Cmd.ProcessState != nil && info.Cmd.ProcessState.Success()
 		} else {
 			isReachable := true
 			start := time.Now()
@@ -135,7 +157,7 @@ func main() {
 			} else {
 				httpHelpers.WriteTimings(w, httpHelpers.Timings{"check-time": elapsed})
 			}
-			output["isReachable"] = isReachable
+			output.IsReachable = isReachable
 		}
 
 		httpHelpers.WriteOutput(w, output)
@@ -151,7 +173,7 @@ func main() {
 		}
 
 		start := time.Now()
-		err := info.Process.Process.Kill()
+		err := info.Cmd.Process.Kill()
 		elapsed := time.Since(start)
 
 		if err != nil {
@@ -165,15 +187,14 @@ func main() {
 		httpHelpers.WriteOutput(w, map[string]any{"msg": "Worker stopped"})
 	})
 
-
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", *hostname, *port),
 		Handler: r,
-		}		
+	}
 	// Run server in background
 	go func() {
 		log.Printf("Starting spawner on %s:%d\n", *hostname, *port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("ListenAndServe error: %v", err)
 		}
 	}()
@@ -184,9 +205,9 @@ func main() {
 
 	for id, w := range workerMap {
 		// If the worker is not running, skip it
-		if w.Process != nil && w.Process.Process != nil {
+		if w.Cmd != nil && w.Cmd.Process != nil {
 			// First try a graceful shutdown
-			err := w.Process.Process.Signal(syscall.SIGTERM)
+			err := w.Cmd.Process.Signal(syscall.SIGTERM)
 			if err != nil {
 				log.Printf("Error sending SIGTERM to process: %v\n", err)
 				continue
@@ -194,14 +215,14 @@ func main() {
 
 			// Wait for it to exit
 			done := make(chan error, 1)
-			go func() { done <- w.Process.Wait() }()
+			go func() { done <- w.Cmd.Wait() }()
 
 			select {
 			case err := <-done:
 				log.Printf("process exited: %v\n", err)
 			case <-time.After(5 * time.Second):
 				log.Println("timeout, force killing")
-				if err := w.Process.Process.Kill(); err != nil {
+				if err := w.Cmd.Process.Kill(); err != nil {
 					log.Printf("Error force killing process: %v\n", err)
 				}
 				<-done // wait again to reap zombie
@@ -219,7 +240,7 @@ func main() {
 		log.Println("HTTP server shut down gracefully")
 	}
 	cancel()
-	
+
 	// Wait a moment to ensure all logs are printed before exiting
 	time.Sleep(1 * time.Second)
 

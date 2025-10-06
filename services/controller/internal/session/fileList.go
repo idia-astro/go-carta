@@ -3,12 +3,12 @@ package session
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
+	"time"
 
 	"idia-astro/go-carta/pkg/cartaDefinitions"
 	cartaProto "idia-astro/go-carta/pkg/grpc"
