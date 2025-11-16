@@ -30,14 +30,12 @@ func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requ
 	if err != nil {
 		return fmt.Errorf("could not connect to worker at %s: %w", addr, err)
 	}
-	s.WorkerConn = workerConn
 
-	// Initialize the worker message channel with a buffer
-	s.workerSendChan = make(chan []byte, 100)
-
-	// Start up the message sender and proxy handler
-	go sendHandler(s.workerSendChan, s.WorkerConn, "worker")
-	go s.workerMessageHandler()
-
-	return s.proxyMessageToWorker(&payload, cartaDefinitions.EventType_REGISTER_VIEWER, requestId)
+	s.sharedWorker = &SessionWorker{
+		conn:           workerConn,
+		clientSendChan: s.clientSendChan,
+		fileRequest:    nil,
+	}
+	s.sharedWorker.handleInit()
+	return s.sharedWorker.proxyMessageToWorker(&payload, cartaDefinitions.EventType_REGISTER_VIEWER, requestId)
 }
