@@ -23,7 +23,7 @@ type Session struct {
 	WorkerConn      *websocket.Conn
 	Context         context.Context
 	clientSendMutex sync.Mutex
-	workerSendMutex sync.Mutex
+	workerSendChan  chan []byte
 }
 
 var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.EventType, uint32, []byte) error{
@@ -63,9 +63,9 @@ func (s *Session) proxyMessageToWorker(msg proto.Message, eventType cartaDefinit
 	if err != nil {
 		return err
 	}
-	s.workerSendMutex.Lock()
-	defer s.workerSendMutex.Unlock()
-	return s.WorkerConn.WriteMessage(websocket.BinaryMessage, byteData)
+
+	s.workerSendChan <- byteData
+	return nil
 }
 
 func (s *Session) sendBinaryPayload(byteData []byte) error {
@@ -80,6 +80,21 @@ func (s *Session) sendMessage(msg proto.Message, eventType cartaDefinitions.Even
 		return err
 	}
 	return s.sendBinaryPayload(byteData)
+}
+
+func (s *Session) workerSendHandler() {
+	for byteData := range s.workerSendChan {
+		byteLength := len(byteData)
+		err := s.WorkerConn.WriteMessage(websocket.BinaryMessage, byteData)
+		remaining := len(s.workerSendChan)
+		if remaining > 0 {
+			log.Printf("Sent message of length %v bytes to worker, %d buffered messages remaining", byteLength, remaining)
+		}
+		if err != nil {
+			log.Printf("Error sending message to worker: %v", err)
+			// Continue processing other messages even if one fails
+		}
+	}
 }
 
 func (s *Session) workerMessageHandler() {
@@ -136,7 +151,7 @@ func (s *Session) HandleMessage(msg []byte) error {
 
 	handler, ok := handlerMap[prefix.EventType]
 	if !ok {
-		log.Printf("unsupported message type: %s (request id: %d), proxying to backend", prefix.EventType, prefix.RequestId)
+		// Any messages that don't have a specific handler are simply proxied to the worker
 		err = s.handleProxiedMessage(prefix.EventType, prefix.RequestId, msg[8:])
 	} else {
 		err = handler(s, prefix.EventType, prefix.RequestId, msg[8:])
@@ -152,6 +167,12 @@ func (s *Session) HandleDisconnect() {
 	if s.Info.WorkerId == "" {
 		return
 	}
+
+	// Close the channel to signal the sender goroutine to stop
+	if s.workerSendChan != nil {
+		close(s.workerSendChan)
+	}
+
 	if s.WorkerConn != nil {
 		helpers.CloseOrLog(s.WorkerConn)
 	}

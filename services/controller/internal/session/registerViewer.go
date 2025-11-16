@@ -32,7 +32,11 @@ func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requ
 	}
 	s.WorkerConn = workerConn
 
-	// Start up the proxy handler
+	// Initialize the worker message channel with a buffer
+	s.workerSendChan = make(chan []byte, 100)
+
+	// Start up the message sender and proxy handler
+	go s.workerSendHandler()
 	go s.workerMessageHandler()
 
 	return s.proxyMessageToWorker(&payload, cartaDefinitions.EventType_REGISTER_VIEWER, requestId)
