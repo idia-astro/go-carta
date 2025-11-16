@@ -49,6 +49,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		Context:        subCtx,
 	}
 
+	s.HandleConnection()
+
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
 

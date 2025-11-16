@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -16,14 +15,14 @@ import (
 )
 
 type Session struct {
-	Info            spawnerHelpers.WorkerInfo
-	SpawnerAddress  string
-	BaseFolder      string
-	WebSocket       *websocket.Conn
-	WorkerConn      *websocket.Conn
-	Context         context.Context
-	clientSendMutex sync.Mutex
-	workerSendChan  chan []byte
+	Info           spawnerHelpers.WorkerInfo
+	SpawnerAddress string
+	BaseFolder     string
+	WebSocket      *websocket.Conn
+	WorkerConn     *websocket.Conn
+	Context        context.Context
+	clientSendChan chan []byte
+	workerSendChan chan []byte
 }
 
 var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.EventType, uint32, []byte) error{
@@ -68,10 +67,8 @@ func (s *Session) proxyMessageToWorker(msg proto.Message, eventType cartaDefinit
 	return nil
 }
 
-func (s *Session) sendBinaryPayload(byteData []byte) error {
-	s.clientSendMutex.Lock()
-	defer s.clientSendMutex.Unlock()
-	return s.WebSocket.WriteMessage(websocket.BinaryMessage, byteData)
+func (s *Session) sendBinaryPayload(byteData []byte) {
+	s.clientSendChan <- byteData
 }
 
 func (s *Session) sendMessage(msg proto.Message, eventType cartaDefinitions.EventType, requestId uint32) error {
@@ -79,19 +76,26 @@ func (s *Session) sendMessage(msg proto.Message, eventType cartaDefinitions.Even
 	if err != nil {
 		return err
 	}
-	return s.sendBinaryPayload(byteData)
+	s.sendBinaryPayload(byteData)
+	return nil
 }
 
-func (s *Session) workerSendHandler() {
-	for byteData := range s.workerSendChan {
+func (s *Session) HandleConnection() {
+	s.clientSendChan = make(chan []byte, 100)
+	go sendHandler(s.clientSendChan, s.WebSocket, "client")
+
+}
+
+func sendHandler(channel chan []byte, conn *websocket.Conn, name string) {
+	for byteData := range channel {
 		byteLength := len(byteData)
-		err := s.WorkerConn.WriteMessage(websocket.BinaryMessage, byteData)
-		remaining := len(s.workerSendChan)
-		if remaining > 0 {
-			log.Printf("Sent message of length %v bytes to worker, %d buffered messages remaining", byteLength, remaining)
+		err := conn.WriteMessage(websocket.BinaryMessage, byteData)
+		remaining := len(channel)
+		if remaining > 1 {
+			log.Printf("Sent message of length %v bytes to %s, %d buffered messages remaining", byteLength, name, remaining)
 		}
 		if err != nil {
-			log.Printf("Error sending message to worker: %v", err)
+			log.Printf("Error sending message to %s: %v", name, err)
 			// Continue processing other messages even if one fails
 		}
 	}
@@ -133,10 +137,7 @@ func (s *Session) workerMessageHandler() {
 
 			// TODO: We will often need to adjust responses here
 			// Pass the incoming message along to the client
-			err = s.sendBinaryPayload(message)
-			if err != nil {
-				log.Printf("failed to send message to client: %v", err)
-			}
+			s.sendBinaryPayload(message)
 
 		}()
 	}
@@ -164,11 +165,16 @@ func (s *Session) HandleMessage(msg []byte) error {
 }
 
 func (s *Session) HandleDisconnect() {
+	// Close the client channel to signal the sender goroutine to stop
+	if s.clientSendChan != nil {
+		close(s.clientSendChan)
+	}
+
 	if s.Info.WorkerId == "" {
 		return
 	}
 
-	// Close the channel to signal the sender goroutine to stop
+	// Close the worker channel to signal the sender goroutine to stop
 	if s.workerSendChan != nil {
 		close(s.workerSendChan)
 	}
