@@ -46,5 +46,5 @@ func (s *Session) handleOpenFile(_ cartaDefinitions.EventType, requestId uint32,
 
 	// We  need to first pass through a register viewer message, and then wait for the ack before sending through the open file message
 	// File opening is handled by workerMessageHandler
-	return s.sharedWorker.proxyMessageToWorker(&payload, cartaDefinitions.EventType_REGISTER_VIEWER, requestId)
+	return fileWorker.proxyMessageToWorker(&payload, cartaDefinitions.EventType_REGISTER_VIEWER, requestId)
 }

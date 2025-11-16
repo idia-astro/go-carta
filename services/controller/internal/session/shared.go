@@ -33,6 +33,13 @@ func (s *Session) handleNotImplementedMessage(eventType cartaDefinitions.EventTy
 func (s *Session) handleProxiedMessage(eventType cartaDefinitions.EventType, requestId uint32, bytes []byte) error {
 	messageBytes := cartaHelpers.PrepareBinaryMessage(bytes, eventType, requestId)
 
+	var workerName string
+	if s.fileMap != nil {
+		workerName = fmt.Sprintf("worker:%d", requestId)
+	} else {
+		workerName = "shared-worker"
+	}
+	log.Printf("Proxying message for event type %v from client to worker %s", eventType, workerName)
 	// Currently we just use the shared worker
 	s.sharedWorker.sendChan <- messageBytes
 	return nil

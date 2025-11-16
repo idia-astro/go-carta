@@ -63,7 +63,15 @@ func (sw *SessionWorker) workerMessageHandler() {
 				return
 			}
 
+			var workerName string
+			if sw.fileRequest != nil {
+				workerName = fmt.Sprintf("worker:%d", sw.fileRequest.FileId)
+			} else {
+				workerName = "shared-worker"
+			}
+
 			// Special case for register viewer: send the open file payload once the worker is ready
+
 			if sw.fileRequest != nil && prefix.EventType == cartaDefinitions.EventType_REGISTER_VIEWER_ACK {
 				err = sw.proxyMessageToWorker(sw.fileRequest, cartaDefinitions.EventType_OPEN_FILE, sw.requestId)
 				if err != nil {
@@ -72,6 +80,7 @@ func (sw *SessionWorker) workerMessageHandler() {
 			} else {
 				// TODO: We will often need to adjust responses here
 				// Pass the incoming message along to the client
+				log.Printf("Proxying message for event type %v from worker %s to client", prefix.EventType, workerName)
 				sw.clientSendChan <- message
 			}
 		}()
