@@ -7,7 +7,22 @@ import (
 	"idia-astro/go-carta/pkg/cartaDefinitions"
 	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
+
+	"github.com/gorilla/websocket"
 )
+
+func sendHandler(channel chan []byte, conn *websocket.Conn, name string) {
+	for byteData := range channel {
+		byteLength := len(byteData)
+		err := conn.WriteMessage(websocket.BinaryMessage, byteData)
+		remaining := len(channel)
+		log.Printf("Sent message of length %v bytes to %s, %d buffered messages remaining", byteLength, name, remaining)
+		if err != nil {
+			log.Printf("Error sending message to %s: %v", name, err)
+			// Continue processing other messages even if one fails
+		}
+	}
+}
 
 func (s *Session) handleNotImplementedMessage(eventType cartaDefinitions.EventType, requestId uint32, _ []byte) error {
 	log.Printf("Not implemented message type %v for request %v", eventType, requestId)
@@ -17,7 +32,9 @@ func (s *Session) handleNotImplementedMessage(eventType cartaDefinitions.EventTy
 // TODO: This is currently a very generic function to proxy any unhandled messages to the backend
 func (s *Session) handleProxiedMessage(eventType cartaDefinitions.EventType, requestId uint32, bytes []byte) error {
 	messageBytes := cartaHelpers.PrepareBinaryMessage(bytes, eventType, requestId)
-	s.workerSendChan <- messageBytes
+
+	// Currently we just use the shared worker
+	s.sharedWorker.sendChan <- messageBytes
 	return nil
 }
 

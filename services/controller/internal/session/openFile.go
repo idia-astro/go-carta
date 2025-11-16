@@ -10,9 +10,9 @@ import (
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
-// RegisterViewer is a special case as it is the first message we receive and is used to spin up the worker connection and set up the proxy handler
-func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requestId uint32, msg []byte) error {
-	var payload cartaDefinitions.RegisterViewer
+// OpenFile needs to spin up a new worker and proxy the message to it
+func (s *Session) handleOpenFile(_ cartaDefinitions.EventType, requestId uint32, msg []byte) error {
+	var payload cartaDefinitions.OpenFile
 	err := s.checkAndParse(&payload, requestId, msg)
 	if err != nil {
 		return fmt.Errorf("error parsing message: %v", err)
@@ -22,19 +22,29 @@ func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requ
 	if err != nil {
 		return fmt.Errorf("error starting worker: %v", err)
 	}
-	s.Info = info
 
-	log.Printf("Worker %s started for session %v and is available at %s:%d", info.WorkerId, payload.SessionId, info.Address, info.Port)
+	log.Printf("Worker %s started for fileId %v and is available at %s:%d", info.WorkerId, payload.FileId, info.Address, info.Port)
 	addr := fmt.Sprintf("ws://%s:%d", info.Address, info.Port)
 	workerConn, _, err := websocket.DefaultDialer.DialContext(s.Context, addr, nil)
 	if err != nil {
 		return fmt.Errorf("could not connect to worker at %s: %w", addr, err)
 	}
 
-	s.sharedWorker = &SessionWorker{
+	fileWorker := &SessionWorker{
+		requestId:      requestId,
+		fileRequest:    &payload,
 		conn:           workerConn,
 		clientSendChan: s.clientSendChan,
 	}
-	s.sharedWorker.handleInit()
+	fileWorker.handleInit()
+
+	if s.fileMap == nil {
+		s.fileMap = make(map[int32]*SessionWorker)
+	}
+
+	s.fileMap[payload.FileId] = fileWorker
+
+	// We  need to first pass through a register viewer message, and then wait for the ack before sending through the open file message
+	// File opening is handled by workerMessageHandler
 	return s.sharedWorker.proxyMessageToWorker(&payload, cartaDefinitions.EventType_REGISTER_VIEWER, requestId)
 }
