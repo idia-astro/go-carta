@@ -1,34 +1,36 @@
 package session
 
 import (
+	"context"
 	"fmt"
-	helpers "idia-astro/go-carta/pkg/shared"
 	"log"
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
 	"idia-astro/go-carta/pkg/cartaDefinitions"
+	helpers "idia-astro/go-carta/pkg/shared"
 	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
 type Session struct {
-	Info           spawnerHelpers.WorkerInfo
-	SpawnerAddress string
-	BaseFolder     string
-	WorkerConn     *grpc.ClientConn
-	WebSocket      *websocket.Conn
-	sendMutex      sync.Mutex
+	Info            spawnerHelpers.WorkerInfo
+	SpawnerAddress  string
+	BaseFolder      string
+	WebSocket       *websocket.Conn
+	WorkerConn      *websocket.Conn
+	Context         context.Context
+	clientSendMutex sync.Mutex
+	workerSendMutex sync.Mutex
 }
 
-var handlerMap = map[cartaDefinitions.EventType]func(*Session, uint32, []byte) error{
+var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.EventType, uint32, []byte) error{
 	cartaDefinitions.EventType_REGISTER_VIEWER:   (*Session).handleRegisterViewerMessage,
-	cartaDefinitions.EventType_FILE_LIST_REQUEST: (*Session).handleFileListRequest,
-	cartaDefinitions.EventType_FILE_INFO_REQUEST: (*Session).handleNotImplementedMessage,
-	cartaDefinitions.EventType_STOP_FILE_LIST:    (*Session).handleNotImplementedMessage,
+	cartaDefinitions.EventType_FILE_LIST_REQUEST: (*Session).handleProxiedMessage,
+	cartaDefinitions.EventType_FILE_INFO_REQUEST: (*Session).handleProxiedMessage,
+	cartaDefinitions.EventType_STOP_FILE_LIST:    (*Session).handleProxiedMessage,
 	cartaDefinitions.EventType_EMPTY_EVENT:       (*Session).handleStatusMessage,
 }
 
@@ -56,14 +58,73 @@ func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []by
 	return nil
 }
 
+func (s *Session) proxyMessageToWorker(msg proto.Message, eventType cartaDefinitions.EventType, requestId uint32) error {
+	byteData, err := cartaHelpers.PrepareMessagePayload(msg, eventType, requestId)
+	if err != nil {
+		return err
+	}
+	s.workerSendMutex.Lock()
+	defer s.workerSendMutex.Unlock()
+	return s.WorkerConn.WriteMessage(websocket.BinaryMessage, byteData)
+}
+
+func (s *Session) sendBinaryPayload(byteData []byte) error {
+	s.clientSendMutex.Lock()
+	defer s.clientSendMutex.Unlock()
+	return s.WebSocket.WriteMessage(websocket.BinaryMessage, byteData)
+}
+
 func (s *Session) sendMessage(msg proto.Message, eventType cartaDefinitions.EventType, requestId uint32) error {
 	byteData, err := cartaHelpers.PrepareMessagePayload(msg, eventType, requestId)
 	if err != nil {
 		return err
 	}
-	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-	return s.WebSocket.WriteMessage(websocket.BinaryMessage, byteData)
+	return s.sendBinaryPayload(byteData)
+}
+
+func (s *Session) workerMessageHandler() {
+	for {
+		messageType, message, err := s.WorkerConn.ReadMessage()
+		if err != nil {
+			log.Println("Error reading message from worker:", err)
+			break
+		}
+
+		// Ping/pong sequence
+		if messageType == websocket.TextMessage && string(message) == "PING" {
+			err := s.WorkerConn.WriteMessage(websocket.TextMessage, []byte("PONG"))
+			if err != nil {
+				log.Printf("Failed to send pong message: %v\n", err)
+			}
+			continue
+		}
+
+		// Ignore all other non-binary messages
+		if messageType != websocket.BinaryMessage {
+			log.Printf("Ignoring non-binary message: %s\n", message)
+			continue
+		}
+
+		go func() {
+			prefix, err := cartaHelpers.DecodeMessagePrefix(message)
+			if err != nil {
+				log.Printf("failed to unmarshal message: %v", err)
+				return
+			}
+			if prefix.IcdVersion != cartaHelpers.IcdVersion {
+				log.Printf("invalid ICD version: %d", prefix.IcdVersion)
+				return
+			}
+
+			// TODO: We will often need to adjust responses here
+			// Pass the incoming message along to the client
+			err = s.sendBinaryPayload(message)
+			if err != nil {
+				log.Printf("failed to send message to client: %v", err)
+			}
+
+		}()
+	}
 }
 
 func (s *Session) HandleMessage(msg []byte) error {
@@ -75,9 +136,10 @@ func (s *Session) HandleMessage(msg []byte) error {
 
 	handler, ok := handlerMap[prefix.EventType]
 	if !ok {
-		return fmt.Errorf("unsupported message type: %s (request id: %d)", prefix.EventType, prefix.RequestId)
+		log.Printf("unsupported message type: %s (request id: %d), proxying to backend", prefix.EventType, prefix.RequestId)
+		err = s.handleProxiedMessage(prefix.EventType, prefix.RequestId, msg[8:])
 	} else {
-		err = handler(s, prefix.RequestId, msg[8:])
+		err = handler(s, prefix.EventType, prefix.RequestId, msg[8:])
 	}
 
 	if err != nil {

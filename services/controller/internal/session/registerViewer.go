@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"log"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/gorilla/websocket"
 
 	"idia-astro/go-carta/pkg/cartaDefinitions"
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
-func (s *Session) handleRegisterViewerMessage(requestId uint32, msg []byte) error {
+// RegisterViewer is a special case as it is the first message we receive and is used to spin up the worker connection and set up the proxy handler
+func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requestId uint32, msg []byte) error {
 	var payload cartaDefinitions.RegisterViewer
 	err := s.checkAndParse(&payload, requestId, msg)
 	if err != nil {
@@ -25,18 +25,15 @@ func (s *Session) handleRegisterViewerMessage(requestId uint32, msg []byte) erro
 	s.Info = info
 
 	log.Printf("Worker %s started for session %v and is available at %s:%d", info.WorkerId, payload.SessionId, info.Address, info.Port)
-	addr := fmt.Sprintf("%s:%d", info.Address, info.Port)
-	workerConn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
+	addr := fmt.Sprintf("ws://%s:%d", info.Address, info.Port)
+	workerConn, _, err := websocket.DefaultDialer.DialContext(s.Context, addr, nil)
 	if err != nil {
 		return fmt.Errorf("could not connect to worker at %s: %w", addr, err)
 	}
 	s.WorkerConn = workerConn
 
-	ackResponse := cartaDefinitions.RegisterViewerAck{
-		SessionId:   payload.SessionId,
-		Success:     true,
-		SessionType: cartaDefinitions.SessionType_NEW,
-	}
-	return s.sendMessage(&ackResponse, cartaDefinitions.EventType_REGISTER_VIEWER_ACK, requestId)
+	// Start up the proxy handler
+	go s.workerMessageHandler()
+
+	return s.proxyMessageToWorker(&payload, cartaDefinitions.EventType_REGISTER_VIEWER, requestId)
 }

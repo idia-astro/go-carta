@@ -35,13 +35,7 @@ func DecodeMessagePrefix(data []byte) (prefix MessagePrefix, err error) {
 	return
 }
 
-func PrepareMessagePayload(msg proto.Message, eventType cartaDefinitions.EventType, requestId uint32) ([]byte, error) {
-	byteData, err := proto.Marshal(msg)
-	if err != nil {
-		fmt.Println("Error marshaling data:", err)
-		return nil, err
-	}
-
+func PrepareBinaryMessage(byteData []byte, eventType cartaDefinitions.EventType, requestId uint32) []byte {
 	// Prepend 8 bytes: first 2 bytes is event Type, next 2 bytes is ICD version, last 4 bytes is request ID
 	header := make([]byte, 8)
 	binary.LittleEndian.PutUint16(header[0:2], uint16(eventType))
@@ -50,5 +44,14 @@ func PrepareMessagePayload(msg proto.Message, eventType cartaDefinitions.EventTy
 
 	// Prepend header to byteData
 	byteData = append(header, byteData...)
-	return byteData, nil
+	return byteData
+}
+
+func PrepareMessagePayload(msg proto.Message, eventType cartaDefinitions.EventType, requestId uint32) ([]byte, error) {
+	byteData, err := proto.Marshal(msg)
+	if err != nil {
+		fmt.Println("Error marshaling data:", err)
+		return nil, err
+	}
+	return PrepareBinaryMessage(byteData, eventType, requestId), nil
 }
