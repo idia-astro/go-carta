@@ -76,78 +76,51 @@ func ExtractFileId(msg proto.Message) (int32, bool) {
 	return -1, false
 }
 
-// UnmarshalMessage Generic unmarshal function that takes an EventType and raw message bytes and attempts to unmarshal the message into the appropriate protobuf message type
-// TODO: I feel like there's a better way to do this using a map, but I can't think of it right now
-func UnmarshalMessage(eventType cartaDefinitions.EventType, rawMsg []byte) (proto.Message, error) {
-	// Map of EventTypes to their corresponding message constructors
-	var msg proto.Message
+// messageTypeMap maps EventTypes to their corresponding message constructor functions
+var messageTypeMap = map[cartaDefinitions.EventType]func() proto.Message{
+	cartaDefinitions.EventType_OPEN_FILE:                     func() proto.Message { return &cartaDefinitions.OpenFile{} },
+	cartaDefinitions.EventType_CLOSE_FILE:                    func() proto.Message { return &cartaDefinitions.CloseFile{} },
+	cartaDefinitions.EventType_SET_IMAGE_CHANNELS:            func() proto.Message { return &cartaDefinitions.SetImageChannels{} },
+	cartaDefinitions.EventType_SET_CURSOR:                    func() proto.Message { return &cartaDefinitions.SetCursor{} },
+	cartaDefinitions.EventType_SET_SPATIAL_REQUIREMENTS:      func() proto.Message { return &cartaDefinitions.SetSpatialRequirements{} },
+	cartaDefinitions.EventType_SET_HISTOGRAM_REQUIREMENTS:    func() proto.Message { return &cartaDefinitions.SetHistogramRequirements{} },
+	cartaDefinitions.EventType_SET_STATS_REQUIREMENTS:        func() proto.Message { return &cartaDefinitions.SetStatsRequirements{} },
+	cartaDefinitions.EventType_SET_SPECTRAL_REQUIREMENTS:     func() proto.Message { return &cartaDefinitions.SetSpectralRequirements{} },
+	cartaDefinitions.EventType_SET_REGION:                    func() proto.Message { return &cartaDefinitions.SetRegion{} },
+	cartaDefinitions.EventType_REMOVE_REGION:                 func() proto.Message { return &cartaDefinitions.RemoveRegion{} },
+	cartaDefinitions.EventType_IMPORT_REGION:                 func() proto.Message { return &cartaDefinitions.ImportRegion{} },
+	cartaDefinitions.EventType_EXPORT_REGION:                 func() proto.Message { return &cartaDefinitions.ExportRegion{} },
+	cartaDefinitions.EventType_SET_CONTOUR_PARAMETERS:        func() proto.Message { return &cartaDefinitions.SetContourParameters{} },
+	cartaDefinitions.EventType_CONCAT_STOKES_FILES:           func() proto.Message { return &cartaDefinitions.ConcatStokesFiles{} },
+	cartaDefinitions.EventType_MOMENT_REQUEST:                func() proto.Message { return &cartaDefinitions.MomentRequest{} },
+	cartaDefinitions.EventType_STOP_MOMENT_CALC:              func() proto.Message { return &cartaDefinitions.StopMomentCalc{} },
+	cartaDefinitions.EventType_SAVE_FILE:                     func() proto.Message { return &cartaDefinitions.SaveFile{} },
+	cartaDefinitions.EventType_PV_REQUEST:                    func() proto.Message { return &cartaDefinitions.PvRequest{} },
+	cartaDefinitions.EventType_STOP_PV_CALC:                  func() proto.Message { return &cartaDefinitions.StopPvCalc{} },
+	cartaDefinitions.EventType_FITTING_REQUEST:               func() proto.Message { return &cartaDefinitions.FittingRequest{} },
+	cartaDefinitions.EventType_STOP_FITTING:                  func() proto.Message { return &cartaDefinitions.StopFitting{} },
+	cartaDefinitions.EventType_REMOTE_FILE_REQUEST:           func() proto.Message { return &cartaDefinitions.RemoteFileRequest{} },
+	cartaDefinitions.EventType_ADD_REQUIRED_TILES:            func() proto.Message { return &cartaDefinitions.AddRequiredTiles{} },
+	cartaDefinitions.EventType_REMOVE_REQUIRED_TILES:         func() proto.Message { return &cartaDefinitions.RemoveRequiredTiles{} },
+	cartaDefinitions.EventType_SET_VECTOR_OVERLAY_PARAMETERS: func() proto.Message { return &cartaDefinitions.SetVectorOverlayParameters{} },
+	cartaDefinitions.EventType_START_ANIMATION:               func() proto.Message { return &cartaDefinitions.StartAnimation{} },
+	cartaDefinitions.EventType_STOP_ANIMATION:                func() proto.Message { return &cartaDefinitions.StopAnimation{} },
+	cartaDefinitions.EventType_ANIMATION_FLOW_CONTROL:        func() proto.Message { return &cartaDefinitions.AnimationFlowControl{} },
+	cartaDefinitions.EventType_OPEN_CATALOG_FILE:             func() proto.Message { return &cartaDefinitions.OpenCatalogFile{} },
+	cartaDefinitions.EventType_CLOSE_CATALOG_FILE:            func() proto.Message { return &cartaDefinitions.CloseCatalogFile{} },
+	cartaDefinitions.EventType_CATALOG_FILTER_REQUEST:        func() proto.Message { return &cartaDefinitions.CatalogFilterRequest{} },
+}
 
-	switch eventType {
-	case cartaDefinitions.EventType_OPEN_FILE:
-		msg = &cartaDefinitions.OpenFile{}
-	case cartaDefinitions.EventType_CLOSE_FILE:
-		msg = &cartaDefinitions.CloseFile{}
-	case cartaDefinitions.EventType_SET_IMAGE_CHANNELS:
-		msg = &cartaDefinitions.SetImageChannels{}
-	case cartaDefinitions.EventType_SET_CURSOR:
-		msg = &cartaDefinitions.SetCursor{}
-	case cartaDefinitions.EventType_SET_SPATIAL_REQUIREMENTS:
-		msg = &cartaDefinitions.SetSpatialRequirements{}
-	case cartaDefinitions.EventType_SET_HISTOGRAM_REQUIREMENTS:
-		msg = &cartaDefinitions.SetHistogramRequirements{}
-	case cartaDefinitions.EventType_SET_STATS_REQUIREMENTS:
-		msg = &cartaDefinitions.SetStatsRequirements{}
-	case cartaDefinitions.EventType_SET_SPECTRAL_REQUIREMENTS:
-		msg = &cartaDefinitions.SetSpectralRequirements{}
-	case cartaDefinitions.EventType_SET_REGION:
-		msg = &cartaDefinitions.SetRegion{}
-	case cartaDefinitions.EventType_REMOVE_REGION:
-		msg = &cartaDefinitions.RemoveRegion{}
-	case cartaDefinitions.EventType_IMPORT_REGION:
-		msg = &cartaDefinitions.ImportRegion{}
-	case cartaDefinitions.EventType_EXPORT_REGION:
-		msg = &cartaDefinitions.ExportRegion{}
-	case cartaDefinitions.EventType_SET_CONTOUR_PARAMETERS:
-		msg = &cartaDefinitions.SetContourParameters{}
-	case cartaDefinitions.EventType_CONCAT_STOKES_FILES:
-		msg = &cartaDefinitions.ConcatStokesFiles{}
-	case cartaDefinitions.EventType_MOMENT_REQUEST:
-		msg = &cartaDefinitions.MomentRequest{}
-	case cartaDefinitions.EventType_STOP_MOMENT_CALC:
-		msg = &cartaDefinitions.StopMomentCalc{}
-	case cartaDefinitions.EventType_SAVE_FILE:
-		msg = &cartaDefinitions.SaveFile{}
-	case cartaDefinitions.EventType_PV_REQUEST:
-		msg = &cartaDefinitions.PvRequest{}
-	case cartaDefinitions.EventType_STOP_PV_CALC:
-		msg = &cartaDefinitions.StopPvCalc{}
-	case cartaDefinitions.EventType_FITTING_REQUEST:
-		msg = &cartaDefinitions.FittingRequest{}
-	case cartaDefinitions.EventType_STOP_FITTING:
-		msg = &cartaDefinitions.StopFitting{}
-	case cartaDefinitions.EventType_REMOTE_FILE_REQUEST:
-		msg = &cartaDefinitions.RemoteFileRequest{}
-	case cartaDefinitions.EventType_ADD_REQUIRED_TILES:
-		msg = &cartaDefinitions.AddRequiredTiles{}
-	case cartaDefinitions.EventType_REMOVE_REQUIRED_TILES:
-		msg = &cartaDefinitions.RemoveRequiredTiles{}
-	case cartaDefinitions.EventType_SET_VECTOR_OVERLAY_PARAMETERS:
-		msg = &cartaDefinitions.SetVectorOverlayParameters{}
-	case cartaDefinitions.EventType_START_ANIMATION:
-		msg = &cartaDefinitions.StartAnimation{}
-	case cartaDefinitions.EventType_STOP_ANIMATION:
-		msg = &cartaDefinitions.StopAnimation{}
-	case cartaDefinitions.EventType_ANIMATION_FLOW_CONTROL:
-		msg = &cartaDefinitions.AnimationFlowControl{}
-	case cartaDefinitions.EventType_OPEN_CATALOG_FILE:
-		msg = &cartaDefinitions.OpenCatalogFile{}
-	case cartaDefinitions.EventType_CLOSE_CATALOG_FILE:
-		msg = &cartaDefinitions.CloseCatalogFile{}
-	case cartaDefinitions.EventType_CATALOG_FILTER_REQUEST:
-		msg = &cartaDefinitions.CatalogFilterRequest{}
-	default:
+// UnmarshalMessage Un-marshals raw message bytes into the appropriate protobuf message type based on EventType
+func UnmarshalMessage(eventType cartaDefinitions.EventType, rawMsg []byte) (proto.Message, error) {
+	// Look up the message constructor in the map
+	constructor, ok := messageTypeMap[eventType]
+	if !ok {
 		return nil, fmt.Errorf("unknown event type: %v", eventType)
 	}
+
+	// Create a new message instance
+	msg := constructor()
 
 	// Unmarshal the message
 	err := proto.Unmarshal(rawMsg, msg)
@@ -158,7 +131,7 @@ func UnmarshalMessage(eventType cartaDefinitions.EventType, rawMsg []byte) (prot
 }
 
 // ExtractFileIdFromBytes attempts to extract the fileId from raw message bytes.
-// It unmarshals the message based on the EventType and then extracts the fileId.
+// It un-marshals the message based on the EventType and then extracts the fileId.
 // Returns the fileId and true if found, or 0 and false if not found or if the message type doesn't have a fileId.
 func ExtractFileIdFromBytes(eventType cartaDefinitions.EventType, rawMsg []byte) (int32, bool) {
 	msg, err := UnmarshalMessage(eventType, rawMsg)
