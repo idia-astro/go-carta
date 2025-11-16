@@ -2,13 +2,14 @@ package session
 
 import (
 	"fmt"
-	"idia-astro/go-carta/pkg/cartaDefinitions"
-	helpers "idia-astro/go-carta/pkg/shared"
-	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
 	"log"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
+
+	"idia-astro/go-carta/pkg/cartaDefinitions"
+	helpers "idia-astro/go-carta/pkg/shared"
+	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
 )
 
 type SessionWorker struct {

@@ -56,19 +56,6 @@ func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []by
 	return nil
 }
 
-func (s *Session) sendBinaryPayload(byteData []byte) {
-	s.clientSendChan <- byteData
-}
-
-func (s *Session) sendMessage(msg proto.Message, eventType cartaDefinitions.EventType, requestId uint32) error {
-	byteData, err := cartaHelpers.PrepareMessagePayload(msg, eventType, requestId)
-	if err != nil {
-		return err
-	}
-	s.sendBinaryPayload(byteData)
-	return nil
-}
-
 func (s *Session) HandleConnection() {
 	s.clientSendChan = make(chan []byte, 100)
 	go sendHandler(s.clientSendChan, s.WebSocket, "client")

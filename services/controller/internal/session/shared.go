@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gorilla/websocket"
+
 	"idia-astro/go-carta/pkg/cartaDefinitions"
 	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
-
-	"github.com/gorilla/websocket"
 )
 
 func sendHandler(channel chan []byte, conn *websocket.Conn, name string) {
@@ -22,11 +22,6 @@ func sendHandler(channel chan []byte, conn *websocket.Conn, name string) {
 			// Continue processing other messages even if one fails
 		}
 	}
-}
-
-func (s *Session) handleNotImplementedMessage(eventType cartaDefinitions.EventType, requestId uint32, _ []byte) error {
-	log.Printf("Not implemented message type %v for request %v", eventType, requestId)
-	return nil
 }
 
 // handleProxiedMessage proxies unhandled messages to the appropriate worker.
