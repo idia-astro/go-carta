@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -35,8 +36,12 @@ func parsePortFromLine(line string) (int, bool) {
 // it is listening ("server listening at ..."). The worker is started with
 // -port=0 so the OS selects a free port, and the detected port from the log is
 // returned.
-func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Duration) (*exec.Cmd, int, error) {
-	cmd := exec.CommandContext(ctx, workerPath, "--debug_no_auth")
+func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Duration, baseFolder string) (*exec.Cmd, int, error) {
+	args := []string{"--debug_no_auth"}
+	if baseFolder != "" {
+		args = append(args, "--base", baseFolder)
+	}
+	cmd := exec.CommandContext(ctx, workerPath, args...)
 
 	// Capture stdout/stderr so we can watch for the readiness log while still
 	// forwarding output to the parent process' stdio.
@@ -71,7 +76,7 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 			}
 			// Detect readiness: parse port from log line.
 			if p, ok := parsePortFromLine(line); ok {
-				fmt.Printf("Detected worker port from log: %d\n", p)
+				log.Printf("Detected worker port from log: %d\n", p)
 				// Send detected port if not already sent.
 				select {
 				case readyCh <- p:

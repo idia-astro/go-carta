@@ -18,7 +18,7 @@ func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requ
 		return fmt.Errorf("error parsing message: %v", err)
 	}
 
-	info, err := spawnerHelpers.RequestWorkerStartup(s.SpawnerAddress)
+	info, err := spawnerHelpers.RequestWorkerStartup(s.SpawnerAddress, s.BaseFolder)
 	if err != nil {
 		return fmt.Errorf("error starting worker: %v", err)
 	}

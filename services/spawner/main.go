@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -47,7 +48,20 @@ func main() {
 	// Start a new worker
 	r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
-		cmd, port, err := processHelpers.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second)
+
+		// parse the optional base folder from the request body
+		var reqBody struct {
+			BaseFolder string `json:"baseFolder"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			log.Printf("Error decoding request body: %v\n", err)
+			httpHelpers.WriteError(w, http.StatusBadRequest, "Error decoding request body")
+			return
+		}
+
+		log.Printf("Process started with base folder: %s\n", reqBody.BaseFolder)
+
+		cmd, port, err := processHelpers.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second, reqBody.BaseFolder)
 		spawnerDuration := time.Since(startTime)
 		if err != nil {
 			log.Printf("Error spawning worker on free port: %v\n", err)

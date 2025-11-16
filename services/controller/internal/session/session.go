@@ -26,11 +26,8 @@ type Session struct {
 }
 
 var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.EventType, uint32, []byte) error{
-	cartaDefinitions.EventType_REGISTER_VIEWER:   (*Session).handleRegisterViewerMessage,
-	cartaDefinitions.EventType_FILE_LIST_REQUEST: (*Session).handleProxiedMessage,
-	cartaDefinitions.EventType_FILE_INFO_REQUEST: (*Session).handleProxiedMessage,
-	cartaDefinitions.EventType_STOP_FILE_LIST:    (*Session).handleProxiedMessage,
-	cartaDefinitions.EventType_EMPTY_EVENT:       (*Session).handleStatusMessage,
+	cartaDefinitions.EventType_REGISTER_VIEWER: (*Session).handleRegisterViewerMessage,
+	cartaDefinitions.EventType_EMPTY_EVENT:     (*Session).handleStatusMessage,
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {
