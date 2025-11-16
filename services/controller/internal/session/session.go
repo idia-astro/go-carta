@@ -28,7 +28,8 @@ type Session struct {
 var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.EventType, uint32, []byte) error{
 	cartaDefinitions.EventType_REGISTER_VIEWER: (*Session).handleRegisterViewerMessage,
 	cartaDefinitions.EventType_OPEN_FILE:       (*Session).handleOpenFile,
-	cartaDefinitions.EventType_EMPTY_EVENT:     (*Session).handleStatusMessage,
+	// TODO: We need to handle CLOSE_FILE separately as well, because it will require shutting down a worker
+	cartaDefinitions.EventType_EMPTY_EVENT: (*Session).handleStatusMessage,
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {
