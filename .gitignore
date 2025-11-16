@@ -9,5 +9,6 @@
 
 # Build artifacts
 /build/*
-
-
+/controller
+/spawner
+/worker
