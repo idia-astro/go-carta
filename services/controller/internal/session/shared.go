@@ -29,19 +29,41 @@ func (s *Session) handleNotImplementedMessage(eventType cartaDefinitions.EventTy
 	return nil
 }
 
-// TODO: This is currently a very generic function to proxy any unhandled messages to the backend
+// handleProxiedMessage proxies unhandled messages to the appropriate worker.
+// It extracts the fileId from the message (if present) and routes to the corresponding worker.
 func (s *Session) handleProxiedMessage(eventType cartaDefinitions.EventType, requestId uint32, bytes []byte) error {
 	messageBytes := cartaHelpers.PrepareBinaryMessage(bytes, eventType, requestId)
 
+	// Try to extract fileId from the message
+	fileId, hasFileId := cartaHelpers.ExtractFileIdFromBytes(eventType, bytes)
+
+	// Determine which worker to send the message to
+	var targetWorker *SessionWorker
 	var workerName string
-	if s.fileMap != nil {
-		workerName = fmt.Sprintf("worker:%d", requestId)
+
+	if hasFileId && s.fileMap != nil {
+		// Check if we have a worker for this fileId
+		if worker, exists := s.fileMap[fileId]; exists {
+			targetWorker = worker
+			workerName = fmt.Sprintf("worker:%d", fileId)
+		} else {
+			// FileId found but no worker mapped, use shared worker
+			targetWorker = s.sharedWorker
+			workerName = fmt.Sprintf("shared-worker (fileId:%d not mapped)", fileId)
+		}
 	} else {
+		// No fileId in message or fileMap not initialized, use shared worker
+		targetWorker = s.sharedWorker
 		workerName = "shared-worker"
 	}
-	log.Printf("Proxying message for event type %v from client to worker %s", eventType, workerName)
-	// Currently we just use the shared worker
-	s.sharedWorker.sendChan <- messageBytes
+
+	log.Printf("Proxying message for event type %v from client to %s", eventType, workerName)
+
+	if targetWorker == nil {
+		return fmt.Errorf("no worker available to handle message")
+	}
+
+	targetWorker.sendChan <- messageBytes
 	return nil
 }
 
