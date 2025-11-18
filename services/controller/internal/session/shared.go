@@ -11,7 +11,7 @@ import (
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
-func sendHandler(channel chan []byte, conn *websocket.Conn, name string) {
+func sendHandler(channel <-chan []byte, conn *websocket.Conn, name string) {
 	for byteData := range channel {
 		byteLength := len(byteData)
 		err := conn.WriteMessage(websocket.BinaryMessage, byteData)
