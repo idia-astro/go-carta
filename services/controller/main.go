@@ -38,30 +38,9 @@ type spaHandler struct {
 	fs   http.Handler
 }
 
-/*
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Clean and resolve requested path
-	path := r.URL.Path
-	if path == "" || path == "/" {
-		http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
-		return
-	}
 
-	// Map URL path to filesystem path
-	fullPath := filepath.Join(h.root, filepath.Clean(path))
 
-	// If the file exists and is not a directory, serve it
-	if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
-		h.fs.ServeHTTP(w, r)
-		return
-	}
-
-	// For everything else (including React routes), serve index.html
-	http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
-}
-*/
-
-func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// If this is a WebSocket upgrade (e.g. ws://localhost:8081), hand it to wsHandler
 	if websocket.IsWebSocketUpgrade(r) {
 		wsHandler(w, r)
