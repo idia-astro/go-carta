@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -38,11 +39,17 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Client connected")
 	defer helpers.CloseOrLog(c)
 
+	subCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
 	s := session.Session{
 		SpawnerAddress: *spawnerAddress,
 		BaseFolder:     *baseFolder,
 		WebSocket:      c,
+		Context:        subCtx,
 	}
+
+	s.HandleConnection()
 
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()

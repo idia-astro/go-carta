@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -20,7 +21,7 @@ import (
 )
 
 var (
-	workerProcess = flag.String("workerProcess", "build/worker", "Path to worker binary")
+	workerProcess = flag.String("workerProcess", "carta_backend", "Path to worker binary")
 	port          = flag.Int("port", 8080, "HTTP server port")
 	hostname      = flag.String("hostname", "", "Hostname to listen on")
 	timeout       = flag.Int("timeout", 5, "Spawn timeout in seconds")
@@ -47,13 +48,27 @@ func main() {
 	// Start a new worker
 	r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
-		cmd, port, err := processHelpers.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second)
+
+		// parse the optional base folder from the request body
+		var reqBody struct {
+			BaseFolder string `json:"baseFolder"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			log.Printf("Error decoding request body: %v\n", err)
+			httpHelpers.WriteError(w, http.StatusBadRequest, "Error decoding request body")
+			return
+		}
+
+		log.Printf("Process started with base folder: %s\n", reqBody.BaseFolder)
+
+		cmd, port, err := processHelpers.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second, reqBody.BaseFolder)
 		spawnerDuration := time.Since(startTime)
 		if err != nil {
 			log.Printf("Error spawning worker on free port: %v\n", err)
 			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error spawning worker")
 			return
 		}
+		log.Printf("Started worker on port: %d\n", port)
 
 		startTime = time.Now()
 		err = processHelpers.TestWorker(ctx, port, 2*time.Second)
@@ -67,7 +82,7 @@ func main() {
 			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error connecting to worker")
 			return
 		}
-		log.Printf("Started worker on port: %d\n", port)
+		log.Printf("Connected to worker on port: %d\n", port)
 		workerId := uuid.New()
 		workerMap[workerId.String()] = &WorkerInfo{
 			Process: cmd,
@@ -165,11 +180,10 @@ func main() {
 		httpHelpers.WriteOutput(w, map[string]any{"msg": "Worker stopped"})
 	})
 
-
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", *hostname, *port),
 		Handler: r,
-		}		
+	}
 	// Run server in background
 	go func() {
 		log.Printf("Starting spawner on %s:%d\n", *hostname, *port)
@@ -219,7 +233,7 @@ func main() {
 		log.Println("HTTP server shut down gracefully")
 	}
 	cancel()
-	
+
 	// Wait a moment to ensure all logs are printed before exiting
 	time.Sleep(1 * time.Second)
 

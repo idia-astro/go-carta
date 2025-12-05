@@ -1,6 +1,7 @@
 package spawnerHelpers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -99,26 +100,33 @@ func GetWorkerStatus(workerId string, spawnerAddress string) (WorkerStatus, erro
 	return WorkerStatus{}, errors.New("failed to get worker status")
 }
 
-func RequestWorkerStartup(spawnerAddress string) (WorkerInfo, error) {
-	req, err := http.NewRequest(http.MethodPost, spawnerAddress, nil)
+func RequestWorkerStartup(spawnerAddress string, baseFolder string) (WorkerInfo, error) {
+	// create a request body with the base folder
+	requestBody, err := json.Marshal(map[string]string{"baseFolder": baseFolder})
+	if err != nil {
+		return WorkerInfo{}, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, spawnerAddress, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return WorkerInfo{}, err
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return WorkerInfo{}, err
 	}
 	defer helpers.CloseOrLog(resp.Body)
-	body, err := io.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return WorkerInfo{}, err
 	}
 
 	if resp.StatusCode == http.StatusOK {
 		var info WorkerInfo
-		err = json.Unmarshal(body, &info)
+		err = json.Unmarshal(responseBody, &info)
 		if err != nil {
 			fmt.Printf("Failed to unmarshal worker info: %v\n", err)
 			return WorkerInfo{}, err
@@ -126,7 +134,7 @@ func RequestWorkerStartup(spawnerAddress string) (WorkerInfo, error) {
 		return info, nil
 	} else {
 		var errorResponse ErrorResponse
-		err = json.Unmarshal(body, &errorResponse)
+		err = json.Unmarshal(responseBody, &errorResponse)
 		if err != nil {
 			fmt.Printf("Failed to unmarshal error response: %v\n", err)
 			return WorkerInfo{}, err
