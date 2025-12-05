@@ -6,12 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/pkg/shared"
 	"idia-astro/go-carta/services/controller/internal/session"
 )
 
@@ -20,6 +20,9 @@ var (
 	hostname       = flag.String("hostname", "", "Hostname to listen on")
 	spawnerAddress = flag.String("spawnerAddress", "http://localhost:8080", "Address of the process spawner")
 	baseFolder     = flag.String("baseFolder", "", "Base folder to use")
+
+	// NEW: where the built carta_frontend (index.html, static/, etc.) lives
+	frontendDir = flag.String("frontendDir", "", "Path to built carta_frontend assets (e.g. /path/to/carta_frontend/build)")
 )
 
 var upgrader = websocket.Upgrader{
@@ -29,6 +32,33 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// spaHandler serves static files if they exist, otherwise falls back to index.html
+type spaHandler struct {
+	root string
+	fs   http.Handler
+}
+
+func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Clean and resolve requested path
+	path := r.URL.Path
+	if path == "" || path == "/" {
+		http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
+		return
+	}
+
+	// Map URL path to filesystem path
+	fullPath := filepath.Join(h.root, filepath.Clean(path))
+
+	// If the file exists and is not a directory, serve it
+	if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
+		h.fs.ServeHTTP(w, r)
+		return
+	}
+
+	// For everything else (including React routes), serve index.html
+	http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
+}
+
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -36,7 +66,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Print("Client connected")
-	defer helpers.CloseOrLog(c)
+	//	defer shared.CloseOrLog(c) // assuming this is the helper you have
 
 	s := session.Session{
 		SpawnerAddress: *spawnerAddress,
@@ -83,23 +113,49 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	log.Print("in new controller")
 	flag.Parse()
-
+	log.Print("in new controller 2")
 	id := uuid.New()
 	log.Printf("Starting controller with UUID: %s\n", id.String())
 
-	// Get
+	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(*baseFolder)) == 0 {
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
 		}
-		err = flag.Set("baseFolder", dirname)
-		if err != nil {
+		if err := flag.Set("baseFolder", dirname); err != nil {
 			log.Fatalf("Failed to set --baseFolder: %v\n", err)
 		}
 	}
 
+	// WebSocket endpoint (same as before)
 	http.HandleFunc("/carta", wsHandler)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", *hostname, *port), nil))
+
+	// If a frontend directory is provided, serve carta_frontend from there
+	if *frontendDir != "" {
+		info, err := os.Stat(*frontendDir)
+		if err != nil || !info.IsDir() {
+			log.Fatalf("Invalid --frontendDir %q: %v\n", *frontendDir, err)
+		}
+
+		log.Printf("Serving carta_frontend from %s\n", *frontendDir)
+		fs := http.FileServer(http.Dir(*frontendDir))
+
+		// Root handler behaves like carta_backend:
+		//  - /           -> index.html
+		//  - /static/... -> real files
+		//  - /whatever   -> index.html (for SPA routes)
+		http.Handle("/", spaHandler{
+			root: *frontendDir,
+			fs:   fs,
+		})
+	} else {
+		log.Print("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
+	}
+
+	addr := fmt.Sprintf("%s:%d", *hostname, *port)
+	log.Printf("Listening on %s\n", addr)
+	log.Fatal(http.ListenAndServe(addr, nil))
 }
