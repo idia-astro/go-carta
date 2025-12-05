@@ -6,9 +6,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/pkg/cartaDefinitions"
-	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
-	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
+	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
+	"github.com/idia-astro/go-carta/services/controller/internal/cartaHelpers"
+	"github.com/idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
 func sendHandler(channel <-chan []byte, conn *websocket.Conn, name string) {

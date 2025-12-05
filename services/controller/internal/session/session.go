@@ -8,9 +8,9 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
-	"idia-astro/go-carta/pkg/cartaDefinitions"
-	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
-	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
+	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
+	"github.com/idia-astro/go-carta/services/controller/internal/cartaHelpers"
+	"github.com/idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
 type Session struct {

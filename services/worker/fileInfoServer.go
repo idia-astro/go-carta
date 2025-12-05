@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	pb "idia-astro/go-carta/pkg/grpc"
+	pb "github.com/idia-astro/go-carta/pkg/grpc"
 )
 
 func (s *fileInfoServer) CheckStatus(_ context.Context, _ *pb.Empty) (*pb.StatusResponse, error) {

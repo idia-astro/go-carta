@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"idia-astro/go-carta/pkg/shared"
+	"github.com/idia-astro/go-carta/pkg/shared"
 )
 
 type ErrorResponse struct {

@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/pkg/shared"
+	"github.com/idia-astro/go-carta/pkg/shared"
 )
 
 // package-scope regex and parser for worker readiness log lines

@@ -5,7 +5,7 @@ import (
 	"io"
 	"log"
 
-	helpers "idia-astro/go-carta/pkg/shared"
+	helpers "github.com/idia-astro/go-carta/pkg/shared"
 )
 
 // #cgo pkg-config: cfitsio

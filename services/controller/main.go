@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/pkg/shared"
-	"idia-astro/go-carta/services/controller/internal/session"
+	"github.com/idia-astro/go-carta/pkg/shared"
+	"github.com/idia-astro/go-carta/services/controller/internal/session"
 )
 
 var (
