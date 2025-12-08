@@ -38,15 +38,14 @@ var handlerMap = map[cartaDefinitions.EventType]func(*Session, uint32, []byte) e
 	cartaDefinitions.EventType_EMPTY_EVENT:       (*Session).handleStatusMessage,
 }
 
-
 // XXX
-func NewSession(conn *websocket.Conn, workerAddr string, user *auth.User) *Session {
-    return &Session{
-        Conn:          conn,
-        SpawnerAddress: workerAddr,
-        User:          user,
-        // ...
-    }
+func NewSession(conn *websocket.Conn, workerAddr string, folder string, user *auth.User) *Session {
+	return &Session{
+		WebSocket:      conn,
+		SpawnerAddress: workerAddr,
+		BaseFolder:     folder,
+		User:           user,
+	}
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {
