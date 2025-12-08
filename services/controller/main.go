@@ -20,8 +20,11 @@ import (
 	authpam "idia-astro/go-carta/services/controller/internal/auth/pam"
 )
 
-/* XXX */
+/*
+	XXX
+
 var (
+
 	port           = flag.Int("port", 8081, "TCP server port")
 	hostname       = flag.String("hostname", "", "Hostname to listen on")
 	spawnerAddress = flag.String("spawnerAddress", "http://localhost:8080", "Address of the process spawner")
@@ -29,9 +32,13 @@ var (
 
 	// NEW: where the built carta_frontend (index.html, static/, etc.) lives
 	frontendDir = flag.String("frontendDir", "", "Path to built carta_frontend assets (e.g. /path/to/carta_frontend/build)")
-)
 
-/**/
+)
+*/
+var (
+	runtimeSpawnerAddress string
+	runtimeBaseFolder     string
+)
 
 var upgrader = websocket.Upgrader{
 	// Ignore Origin header
@@ -87,7 +94,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	//    XXX  if err != nil { ... }
 
-	s := session.NewSession(conn, *spawnerAddress, *baseFolder, user)
+	s := session.NewSession(conn, runtimeSpawnerAddress, runtimeBaseFolder, user)
+
 	/* XXX	s := session.Session{
 		SpawnerAddress: *spawnerAddress,
 		BaseFolder:     *baseFolder,
@@ -169,6 +177,9 @@ func main() {
 
 	flag.Parse()
 
+	runtimeSpawnerAddress = cfg.SpawnerAddress
+	runtimeBaseFolder = cfg.BaseFolder
+
 	var authenticator auth.Authenticator
 
 	switch cfg.AuthMode {
@@ -190,7 +201,7 @@ func main() {
 	}
 
 	// Default baseFolder to $HOME if unset
-	if len(strings.TrimSpace(*baseFolder)) == 0 {
+	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
@@ -206,28 +217,28 @@ func main() {
 	http.Handle("/carta", withAuth(authenticator, http.HandlerFunc(wsHandler)))
 
 	// If a frontend directory is provided, serve carta_frontend from there
-	if *frontendDir != "" {
-		info, err := os.Stat(*frontendDir)
+	if cfg.FrontendDir != "" {
+		info, err := os.Stat(cfg.FrontendDir)
 		if err != nil || !info.IsDir() {
-			log.Fatalf("Invalid --frontendDir %q: %v\n", *frontendDir, err)
+			log.Fatalf("Invalid --frontendDir %q: %v\n", cfg.FrontendDir, err)
 		}
 
-		log.Printf("Serving carta_frontend from %s\n", *frontendDir)
-		fs := http.FileServer(http.Dir(*frontendDir))
+		log.Printf("Serving carta_frontend from %s\n", cfg.FrontendDir)
+		fs := http.FileServer(http.Dir(cfg.FrontendDir))
 
 		// Root handler behaves like carta_backend:
 		//  - /           -> index.html
 		//  - /static/... -> real files
 		//  - /whatever   -> index.html (for SPA routes)
 		http.Handle("/", spaHandler{
-			root: *frontendDir,
+			root: cfg.FrontendDir,
 			fs:   fs,
 		})
 	} else {
 		log.Print("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}
 
-	addr := fmt.Sprintf("%s:%d", *hostname, *port)
+	addr := fmt.Sprintf("%s:%d", cfg.Hostname, cfg.Port)
 	log.Printf("Listening on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 
