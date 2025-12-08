@@ -18,13 +18,13 @@ import (
 
 	"idia-astro/go-carta/services/controller/internal/auth"
 	authoidc "idia-astro/go-carta/services/controller/internal/auth/oidc"
-	pamauth "idia-astro/go-carta/services/controller/internal/auth/pam"
+	authpam "idia-astro/go-carta/services/controller/internal/auth/pam"
 )
 
 var (
 	runtimeSpawnerAddress string
 	runtimeBaseFolder     string
-	pamAuth               *pamauth.PAMAuthenticator
+	pamAuth               *authpam.PAMAuthenticator
 )
 
 var upgrader = websocket.Upgrader{
@@ -78,21 +78,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Print("Client connected")
-	//	defer shared.CloseOrLog(c) // assuming this is the helper you have
 
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
-	// upgrade to WebSocket etc.
-	//	c, err := upgrader.Upgrade(w, r, nil)
-	//    XXX  if err != nil { ... }
 
 	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
 
-	/* XXX	s := session.Session{
-		SpawnerAddress: *spawnerAddress,
-		BaseFolder:     *baseFolder,
-		WebSocket:      c,
-	}
-	*/
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
 
@@ -145,7 +135,8 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
-func pamLoginHandler(p *pamauth.PAMAuthenticator) http.Handler {
+
+func pamLoginHandler(p *authpam.PAMAuthenticator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -183,7 +174,7 @@ func pamLoginHandler(p *pamauth.PAMAuthenticator) http.Handler {
 				return
 			}
 
-			if err := pamauth.SetPAMSessionCookie(w, user.Username); err != nil {
+			if err := authpam.SetPAMSessionCookie(w, user.Username); err != nil {
 				log.Printf("Failed to set PAM session cookie: %v", err)
 				http.Error(w, "Session error", http.StatusInternalServerError)
 				return
@@ -229,14 +220,14 @@ func main() {
 	case config.AuthNone:
 		authenticator = auth.NoopAuthenticator{}
 	case config.AuthPAM:
-		p := pamauth.New(cfg.PAM)
+		p := authpam.New(cfg.PAM)
 		pamAuth = p
 		authenticator = p
 	case config.AuthOIDC:
 		authenticator = authoidc.New(cfg.OIDC)
 	case config.AuthBoth:
 		authenticator = auth.Multi(
-			pamauth.New(cfg.PAM),
+			authpam.New(cfg.PAM),
 			authoidc.New(cfg.OIDC),
 		)
 	default:
@@ -253,11 +244,6 @@ func main() {
 			log.Fatalf("Failed to set --baseFolder: %v\n", err)
 		}
 	}
-
-	// WebSocket endpoint (same as before)
-	// XXX
-	//	http.HandleFunc("/carta", wsHandler)
-	//	http.Handle("/carta", withAuth(authenticator, http.HandlerFunc(wsHandler)))
 
 	// If a frontend directory is provided, serve carta_frontend from there
 	if cfg.FrontendDir != "" {
@@ -289,5 +275,4 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", cfg.Hostname, cfg.Port)
 	log.Printf("Listening on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
-
 }
