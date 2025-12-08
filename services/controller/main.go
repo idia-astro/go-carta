@@ -18,26 +18,9 @@ import (
 
 	"idia-astro/go-carta/services/controller/internal/auth"
 	authoidc "idia-astro/go-carta/services/controller/internal/auth/oidc"
-
-	authpam "idia-astro/go-carta/services/controller/internal/auth/pam"
 	pamauth "idia-astro/go-carta/services/controller/internal/auth/pam"
 )
 
-/*
-	XXX
-
-var (
-
-	port           = flag.Int("port", 8081, "TCP server port")
-	hostname       = flag.String("hostname", "", "Hostname to listen on")
-	spawnerAddress = flag.String("spawnerAddress", "http://localhost:8080", "Address of the process spawner")
-	baseFolder     = flag.String("baseFolder", "", "Base folder to use")
-
-	// NEW: where the built carta_frontend (index.html, static/, etc.) lives
-	frontendDir = flag.String("frontendDir", "", "Path to built carta_frontend assets (e.g. /path/to/carta_frontend/build)")
-
-)
-*/
 var (
 	runtimeSpawnerAddress string
 	runtimeBaseFolder     string
@@ -246,7 +229,6 @@ func main() {
 	case config.AuthNone:
 		authenticator = auth.NoopAuthenticator{}
 	case config.AuthPAM:
-		// XXX	authenticator = authpam.New(cfg.PAM)
 		p := pamauth.New(cfg.PAM)
 		pamAuth = p
 		authenticator = p
@@ -254,7 +236,7 @@ func main() {
 		authenticator = authoidc.New(cfg.OIDC)
 	case config.AuthBoth:
 		authenticator = auth.Multi(
-			authpam.New(cfg.PAM),
+			pamauth.New(cfg.PAM),
 			authoidc.New(cfg.OIDC),
 		)
 	default:
