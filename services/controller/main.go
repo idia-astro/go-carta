@@ -17,7 +17,10 @@ import (
 	"idia-astro/go-carta/services/controller/internal/session"
 
 	"idia-astro/go-carta/services/controller/internal/auth"
+	authoidc "idia-astro/go-carta/services/controller/internal/auth/oidc"
+
 	authpam "idia-astro/go-carta/services/controller/internal/auth/pam"
+	pamauth "idia-astro/go-carta/services/controller/internal/auth/pam"
 )
 
 /*
@@ -38,6 +41,7 @@ var (
 var (
 	runtimeSpawnerAddress string
 	runtimeBaseFolder     string
+	pamAuth               *pamauth.PAMAuthenticator
 )
 
 var upgrader = websocket.Upgrader{
@@ -51,6 +55,10 @@ var upgrader = websocket.Upgrader{
 type spaHandler struct {
 	root string
 	fs   http.Handler
+}
+
+type rootHandler struct {
+	spa http.Handler // your spaHandler
 }
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +162,56 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
+func pamLoginHandler(p *pamauth.PAMAuthenticator) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprint(w, `
+<!DOCTYPE html>
+<html>
+  <head><title>CARTA Login</title></head>
+  <body>
+    <h2>CARTA Login (PAM)</h2>
+    <form method="POST">
+      <label>Username: <input name="username" /></label><br/>
+      <label>Password: <input type="password" name="password" /></label><br/>
+      <button type="submit">Login</button>
+    </form>
+  </body>
+</html>
+`)
+		case http.MethodPost:
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "Bad form", http.StatusBadRequest)
+				return
+			}
+			username := r.Form.Get("username")
+			password := r.Form.Get("password")
+			if username == "" || password == "" {
+				http.Error(w, "Missing username or password", http.StatusBadRequest)
+				return
+			}
+
+			user, err := p.AuthenticateCredentials(r.Context(), username, password)
+			if err != nil {
+				log.Printf("PAM login failed for %q: %v", username, err)
+				http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+				return
+			}
+
+			if err := pamauth.SetPAMSessionCookie(w, user.Username); err != nil {
+				log.Printf("Failed to set PAM session cookie: %v", err)
+				http.Error(w, "Session error", http.StatusInternalServerError)
+				return
+			}
+
+			http.Redirect(w, r, "/", http.StatusFound)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+}
 
 func main() {
 	id := uuid.New()
@@ -188,16 +246,17 @@ func main() {
 	case config.AuthNone:
 		authenticator = auth.NoopAuthenticator{}
 	case config.AuthPAM:
-		authenticator = authpam.New(cfg.PAM)
-		/* XXX
-		case config.AuthOIDC:
-			authenticator = authoidc.New(cfg.OIDC)
-		case config.AuthBoth:
-			authenticator = auth.Multi(
-				authpam.New(cfg.PAM),
-				authoidc.New(cfg.OIDC),
-			)
-		*/
+		// XXX	authenticator = authpam.New(cfg.PAM)
+		p := pamauth.New(cfg.PAM)
+		pamAuth = p
+		authenticator = p
+	case config.AuthOIDC:
+		authenticator = authoidc.New(cfg.OIDC)
+	case config.AuthBoth:
+		authenticator = auth.Multi(
+			authpam.New(cfg.PAM),
+			authoidc.New(cfg.OIDC),
+		)
 	default:
 		log.Fatalf("Unknown authMode %q", cfg.AuthMode)
 	}
@@ -216,7 +275,7 @@ func main() {
 	// WebSocket endpoint (same as before)
 	// XXX
 	//	http.HandleFunc("/carta", wsHandler)
-	http.Handle("/carta", withAuth(authenticator, http.HandlerFunc(wsHandler)))
+	//	http.Handle("/carta", withAuth(authenticator, http.HandlerFunc(wsHandler)))
 
 	// If a frontend directory is provided, serve carta_frontend from there
 	if cfg.FrontendDir != "" {
@@ -232,10 +291,15 @@ func main() {
 		//  - /           -> index.html
 		//  - /static/... -> real files
 		//  - /whatever   -> index.html (for SPA routes)
-		http.Handle("/", spaHandler{
+		http.Handle("/", withAuth(authenticator, spaHandler{
 			root: cfg.FrontendDir,
 			fs:   fs,
-		})
+		}))
+
+		// Expose the PAM login page if PAM is enabled.
+		if pamAuth != nil {
+			http.Handle("/pam-login", pamLoginHandler(pamAuth))
+		}
 	} else {
 		log.Print("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}
