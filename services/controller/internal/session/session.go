@@ -11,9 +11,14 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"idia-astro/go-carta/pkg/cartaDefinitions"
+	"idia-astro/go-carta/services/controller/internal/auth"
 	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
 	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
+
+type contextKey string
+
+const UserContextKey contextKey = "sessionUser"
 
 type Session struct {
 	Info           spawnerHelpers.WorkerInfo
@@ -22,6 +27,7 @@ type Session struct {
 	WorkerConn     *grpc.ClientConn
 	WebSocket      *websocket.Conn
 	sendMutex      sync.Mutex
+	User           *auth.User
 }
 
 var handlerMap = map[cartaDefinitions.EventType]func(*Session, uint32, []byte) error{
@@ -30,6 +36,17 @@ var handlerMap = map[cartaDefinitions.EventType]func(*Session, uint32, []byte) e
 	cartaDefinitions.EventType_FILE_INFO_REQUEST: (*Session).handleNotImplementedMessage,
 	cartaDefinitions.EventType_STOP_FILE_LIST:    (*Session).handleNotImplementedMessage,
 	cartaDefinitions.EventType_EMPTY_EVENT:       (*Session).handleStatusMessage,
+}
+
+
+// XXX
+func NewSession(conn *websocket.Conn, workerAddr string, user *auth.User) *Session {
+    return &Session{
+        Conn:          conn,
+        SpawnerAddress: workerAddr,
+        User:          user,
+        // ...
+    }
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {
