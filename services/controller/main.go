@@ -91,10 +91,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
 	// upgrade to WebSocket etc.
-	conn, err := upgrader.Upgrade(w, r, nil)
+	//	c, err := upgrader.Upgrade(w, r, nil)
 	//    XXX  if err != nil { ... }
 
-	s := session.NewSession(conn, runtimeSpawnerAddress, runtimeBaseFolder, user)
+	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
 
 	/* XXX	s := session.Session{
 		SpawnerAddress: *spawnerAddress,
@@ -181,6 +181,8 @@ func main() {
 	runtimeBaseFolder = cfg.BaseFolder
 
 	var authenticator auth.Authenticator
+
+	log.Printf("Auth mode: %s", cfg.AuthMode)
 
 	switch cfg.AuthMode {
 	case config.AuthNone:
