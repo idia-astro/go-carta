@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -12,9 +13,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
+	"idia-astro/go-carta/services/controller/internal/config"
 	"idia-astro/go-carta/services/controller/internal/session"
+
+	"idia-astro/go-carta/services/controller/internal/auth"
+	authpam "idia-astro/go-carta/services/controller/internal/auth/pam"
 )
 
+/* XXX */
 var (
 	port           = flag.Int("port", 8081, "TCP server port")
 	hostname       = flag.String("hostname", "", "Hostname to listen on")
@@ -24,6 +30,8 @@ var (
 	// NEW: where the built carta_frontend (index.html, static/, etc.) lives
 	frontendDir = flag.String("frontendDir", "", "Path to built carta_frontend assets (e.g. /path/to/carta_frontend/build)")
 )
+
+/**/
 
 var upgrader = websocket.Upgrader{
 	// Ignore Origin header
@@ -39,8 +47,6 @@ type spaHandler struct {
 }
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-
 	// If this is a WebSocket upgrade (e.g. ws://localhost:8081), hand it to wsHandler
 	if websocket.IsWebSocketUpgrade(r) {
 		wsHandler(w, r)
@@ -76,12 +82,18 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Client connected")
 	//	defer shared.CloseOrLog(c) // assuming this is the helper you have
 
-	s := session.Session{
+	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
+	// upgrade to WebSocket etc.
+	conn, err := upgrader.Upgrade(w, r, nil)
+	//    XXX  if err != nil { ... }
+
+	s := session.NewSession(conn, *spawnerAddress, *baseFolder, user)
+	/* XXX	s := session.Session{
 		SpawnerAddress: *spawnerAddress,
 		BaseFolder:     *baseFolder,
 		WebSocket:      c,
 	}
-
+	*/
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
 
@@ -120,12 +132,62 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Client disconnected")
 }
 
+func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, err := a.AuthenticateHTTP(w, r)
+		if err != nil {
+			// Authenticator can already have written error; just stop here.
+			log.Printf("Auth failed: %v", err)
+			return
+		}
+
+		// Attach user to context
+		ctx := context.WithValue(r.Context(), session.UserContextKey, user)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func main() {
-	log.Print("in new controller")
-	flag.Parse()
-	log.Print("in new controller 2")
 	id := uuid.New()
 	log.Printf("Starting controller with UUID: %s\n", id.String())
+
+	cfg := config.Config{}
+	flag.IntVar(&cfg.Port, "port", 8081, "TCP server port")
+	flag.StringVar(&cfg.Hostname, "hostname", "", "Hostname to listen on")
+	flag.StringVar(&cfg.SpawnerAddress, "spawnerAddress", "http://localhost:8080", "Address of the process spawner")
+	flag.StringVar(&cfg.BaseFolder, "baseFolder", "", "Base folder for data")
+	flag.StringVar(&cfg.FrontendDir, "frontendDir", "", "Directory with carta_frontend")
+
+	flag.StringVar((*string)(&cfg.AuthMode), "authMode", "none", "Authentication mode: none|pam|oidc|both")
+
+	flag.StringVar(&cfg.PAM.ServiceName, "pamService", "carta", "PAM service name (for pam authMode)")
+
+	flag.StringVar(&cfg.OIDC.IssuerURL, "oidcIssuer", "", "OIDC issuer URL (e.g. https://keycloak.example.com/realms/xyz)")
+	flag.StringVar(&cfg.OIDC.ClientID, "oidcClientID", "", "OIDC client ID")
+	flag.StringVar(&cfg.OIDC.ClientSecret, "oidcClientSecret", "", "OIDC client secret")
+	flag.StringVar(&cfg.OIDC.RedirectURL, "oidcRedirectURL", "", "OIDC redirect/callback URL")
+
+	flag.Parse()
+
+	var authenticator auth.Authenticator
+
+	switch cfg.AuthMode {
+	case config.AuthNone:
+		authenticator = auth.NoopAuthenticator{}
+	case config.AuthPAM:
+		authenticator = authpam.New(cfg.PAM)
+		/* XXX
+		case config.AuthOIDC:
+			authenticator = authoidc.New(cfg.OIDC)
+		case config.AuthBoth:
+			authenticator = auth.Multi(
+				authpam.New(cfg.PAM),
+				authoidc.New(cfg.OIDC),
+			)
+		*/
+	default:
+		log.Fatalf("Unknown authMode %q", cfg.AuthMode)
+	}
 
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(*baseFolder)) == 0 {
@@ -139,7 +201,9 @@ func main() {
 	}
 
 	// WebSocket endpoint (same as before)
-	http.HandleFunc("/carta", wsHandler)
+	// XXX
+	//	http.HandleFunc("/carta", wsHandler)
+	http.Handle("/carta", withAuth(authenticator, http.HandlerFunc(wsHandler)))
 
 	// If a frontend directory is provided, serve carta_frontend from there
 	if *frontendDir != "" {
