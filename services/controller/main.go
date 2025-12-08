@@ -40,7 +40,6 @@ type spaHandler struct {
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-
 	// If this is a WebSocket upgrade (e.g. ws://localhost:8081), hand it to wsHandler
 	if websocket.IsWebSocketUpgrade(r) {
 		wsHandler(w, r)
@@ -121,9 +120,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.Print("in new controller")
 	flag.Parse()
-	log.Print("in new controller 2")
 	id := uuid.New()
 	log.Printf("Starting controller with UUID: %s\n", id.String())
 
