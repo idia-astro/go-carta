@@ -125,7 +125,12 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, err := a.AuthenticateHTTP(w, r)
 		if err != nil {
-			// Authenticator can already have written error; just stop here.
+			// Expected when we just redirected to /oidc/login
+			if strings.Contains(err.Error(), "no OIDC session") {
+				// optional: log at debug level instead
+				log.Printf("Auth: redirecting to OIDC login")
+				return
+			}
 			log.Printf("Auth failed: %v", err)
 			return
 		}
@@ -187,6 +192,8 @@ func pamLoginHandler(p *authpam.PAMAuthenticator) http.Handler {
 	})
 }
 
+var oidcAuth *authoidc.OIDCAuthenticator
+
 func main() {
 	id := uuid.New()
 	log.Printf("Starting controller with UUID: %s\n", id.String())
@@ -224,8 +231,11 @@ func main() {
 		pamAuth = p
 		authenticator = p
 	case config.AuthOIDC:
-		authenticator = authoidc.New(cfg.OIDC)
+		o := authoidc.New(cfg.OIDC)
+		oidcAuth = o
+		authenticator = o
 	case config.AuthBoth:
+		// You can extend this later; for now leave as-is or combine PAM + OIDC
 		authenticator = auth.Multi(
 			authpam.New(cfg.PAM),
 			authoidc.New(cfg.OIDC),
@@ -233,7 +243,6 @@ func main() {
 	default:
 		log.Fatalf("Unknown authMode %q", cfg.AuthMode)
 	}
-
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
 		dirname, err := os.UserHomeDir()
@@ -254,6 +263,9 @@ func main() {
 
 		log.Printf("Serving carta_frontend from %s\n", cfg.FrontendDir)
 		fs := http.FileServer(http.Dir(cfg.FrontendDir))
+
+		http.Handle("/oidc/login", http.HandlerFunc(oidcAuth.LoginHandler))
+		http.Handle("/oidc/callback", http.HandlerFunc(oidcAuth.CallbackHandler))
 
 		// Root handler behaves like carta_backend:
 		//  - /           -> index.html
