@@ -13,12 +13,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/services/controller/internal/config"
-	"idia-astro/go-carta/services/controller/internal/session"
+	"github.com/idia-astro/go-carta/services/controller/internal/config"
+	"github.com/idia-astro/go-carta/services/controller/internal/session"
 
-	"idia-astro/go-carta/services/controller/internal/auth"
-	authoidc "idia-astro/go-carta/services/controller/internal/auth/oidc"
-	authpam "idia-astro/go-carta/services/controller/internal/auth/pam"
+	"github.com/idia-astro/go-carta/services/controller/internal/auth"
+	authoidc "github.com/idia-astro/go-carta/services/controller/internal/auth/oidc"
+	authpam "github.com/idia-astro/go-carta/services/controller/internal/auth/pam"
 )
 
 var (
@@ -245,6 +245,17 @@ func main() {
 	}
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
+
+		/*		=======
+				func main() {
+					flag.Parse()
+					id := uuid.New()
+					log.Printf("Starting controller with UUID: %s\n", id.String())
+
+					// Default baseFolder to $HOME if unset
+					if len(strings.TrimSpace(*baseFolder)) == 0 {
+				>>>>>>> origin/main
+		*/
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"

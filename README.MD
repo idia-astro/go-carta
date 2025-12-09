@@ -1,3 +1,7 @@
+# go-carta
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/idia-astro/go-carta.svg)](https://pkg.go.dev/github.com/idia-astro/go-carta)
+
 ## Required tools and packages
 
 ### Golang

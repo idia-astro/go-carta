@@ -5,21 +5,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/pkg/grpc"
-	"idia-astro/go-carta/pkg/shared"
+	"github.com/idia-astro/go-carta/pkg/shared"
 )
 
 // package-scope regex and parser for worker readiness log lines
-var listenRe = regexp.MustCompile(`server listening at .*:(\d+)`)
+var listenRe = regexp.MustCompile(`Listening on port (\d+) with top level folder`)
 
 func parsePortFromLine(line string) (int, bool) {
 	m := listenRe.FindStringSubmatch(line)
@@ -37,8 +36,12 @@ func parsePortFromLine(line string) (int, bool) {
 // it is listening ("server listening at ..."). The worker is started with
 // -port=0 so the OS selects a free port, and the detected port from the log is
 // returned.
-func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Duration) (*exec.Cmd, int, error) {
-	cmd := exec.CommandContext(ctx, workerPath, "-port=0")
+func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Duration, baseFolder string) (*exec.Cmd, int, error) {
+	args := []string{"--debug_no_auth"}
+	if baseFolder != "" {
+		args = append(args, "--base", baseFolder)
+	}
+	cmd := exec.CommandContext(ctx, workerPath, args...)
 
 	// Capture stdout/stderr so we can watch for the readiness log while still
 	// forwarding output to the parent process' stdio.
@@ -73,7 +76,7 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 			}
 			// Detect readiness: parse port from log line.
 			if p, ok := parsePortFromLine(line); ok {
-				fmt.Printf("Detected worker port from log: %d\n", p)
+				log.Printf("Detected worker port from log: %d\n", p)
 				// Send detected port if not already sent.
 				select {
 				case readyCh <- p:
@@ -101,23 +104,32 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 }
 
 func TestWorker(ctx context.Context, port int, timeoutDuration time.Duration) error {
-	addr := fmt.Sprintf("localhost:%d", port)
-	// Create a client connection (non-blocking)
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	addr := fmt.Sprintf("ws://localhost:%d", port)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, timeoutDuration)
+	defer cancel()
+	// Connect to the worker websocket
+	conn, _, err := websocket.DefaultDialer.DialContext(rpcCtx, addr, nil)
 	if err != nil {
-		return fmt.Errorf("could not connect to worker at %s: %w", addr, err)
+		return err
 	}
 	defer helpers.CloseOrLog(conn)
 
-	client := cartaProto.NewFileInfoServiceClient(conn)
-	rpcCtx, cancel := context.WithTimeout(ctx, timeoutDuration)
-	defer cancel()
-
-	r, err := client.CheckStatus(rpcCtx, &cartaProto.Empty{})
+	// Send a PING text message and wait for a PONG
+	err = conn.WriteMessage(websocket.TextMessage, []byte("PING"))
 	if err != nil {
-		return fmt.Errorf("fileInfoService CheckStatus failed: %w", err)
+		return err
+	}
+	messageType, message, err := conn.ReadMessage()
+	if err != nil {
+		return err
+	}
+	if messageType != websocket.TextMessage {
+		return fmt.Errorf("expected text message, got %d", messageType)
+	}
+	if string(message) != "PONG" {
+		return fmt.Errorf("expected PONG, got %s", string(message))
 	}
 
-	fmt.Printf("Worker FileInfoService responded (instanceID: %s): %s\n", r.InstanceId, r.StatusMessage)
 	return nil
 }
