@@ -1,18 +1,19 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"idia-astro/go-carta/services/controller/internal/session"
+	helpers "github.com/idia-astro/go-carta/pkg/shared"
+	"github.com/idia-astro/go-carta/services/controller/internal/session"
 )
 
 var (
@@ -20,9 +21,7 @@ var (
 	hostname       = flag.String("hostname", "", "Hostname to listen on")
 	spawnerAddress = flag.String("spawnerAddress", "http://localhost:8080", "Address of the process spawner")
 	baseFolder     = flag.String("baseFolder", "", "Base folder to use")
-
-	// NEW: where the built carta_frontend (index.html, static/, etc.) lives
-	frontendDir = flag.String("frontendDir", "", "Path to built carta_frontend assets (e.g. /path/to/carta_frontend/build)")
+	frontendDir    = flag.String("frontendDir", "", "Path to built carta_frontend assets (e.g. /path/to/carta_frontend/build)")
 )
 
 var upgrader = websocket.Upgrader{
@@ -34,36 +33,16 @@ var upgrader = websocket.Upgrader{
 
 // spaHandler serves static files if they exist, otherwise falls back to index.html
 type spaHandler struct {
-	root string
-	fs   http.Handler
+	fs http.Handler
 }
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	// If this is a WebSocket upgrade (e.g. ws://localhost:8081), hand it to wsHandler
 	if websocket.IsWebSocketUpgrade(r) {
 		wsHandler(w, r)
-		return
-	}
-
-	// Clean and resolve requested path
-	path := r.URL.Path
-	if path == "" || path == "/" {
-		http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
-		return
-	}
-
-	// Map URL path to filesystem path
-	fullPath := filepath.Join(h.root, filepath.Clean(path))
-
-	// If the file exists and is not a directory, serve it
-	if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
+	} else {
 		h.fs.ServeHTTP(w, r)
-		return
 	}
 
-	// For everything else (including React routes), serve index.html
-	http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -73,15 +52,18 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Print("Client connected")
-	//	defer shared.CloseOrLog(c) // assuming this is the helper you have
+	defer helpers.CloseOrLog(c)
+
+	subCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
 
 	s := session.Session{
 		SpawnerAddress: *spawnerAddress,
 		BaseFolder:     *baseFolder,
 		WebSocket:      c,
+		Context:        subCtx,
 	}
-
-	// Close worker on exit if it exists
+	s.HandleConnection()
 	defer s.HandleDisconnect()
 
 	// Basic handler based on gorilla/websocket example
@@ -135,9 +117,6 @@ func main() {
 		}
 	}
 
-	// WebSocket endpoint (same as before)
-	http.HandleFunc("/carta", wsHandler)
-
 	// If a frontend directory is provided, serve carta_frontend from there
 	if *frontendDir != "" {
 		info, err := os.Stat(*frontendDir)
@@ -146,18 +125,10 @@ func main() {
 		}
 
 		log.Printf("Serving carta_frontend from %s\n", *frontendDir)
-		fs := http.FileServer(http.Dir(*frontendDir))
-
-		// Root handler behaves like carta_backend:
-		//  - /           -> index.html
-		//  - /static/... -> real files
-		//  - /whatever   -> index.html (for SPA routes)
-		http.Handle("/", spaHandler{
-			root: *frontendDir,
-			fs:   fs,
-		})
+		http.Handle("/", spaHandler{fs: http.FileServer(http.Dir(*frontendDir))})
 	} else {
 		log.Print("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
+		http.HandleFunc("/carta", wsHandler)
 	}
 
 	addr := fmt.Sprintf("%s:%d", *hostname, *port)

@@ -1,40 +1,40 @@
 package session
 
 import (
+	"context"
 	"fmt"
-	helpers "idia-astro/go-carta/pkg/shared"
 	"log"
-	"sync"
 
 	"github.com/gorilla/websocket"
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
-	"idia-astro/go-carta/pkg/cartaDefinitions"
-	"idia-astro/go-carta/services/controller/internal/cartaHelpers"
-	"idia-astro/go-carta/services/controller/internal/spawnerHelpers"
+	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
+	"github.com/idia-astro/go-carta/services/controller/internal/cartaHelpers"
+	"github.com/idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
 
 type Session struct {
 	Info           spawnerHelpers.WorkerInfo
 	SpawnerAddress string
 	BaseFolder     string
-	WorkerConn     *grpc.ClientConn
 	WebSocket      *websocket.Conn
-	sendMutex      sync.Mutex
+	Context        context.Context
+	clientSendChan chan []byte
+	// maps incoming file IDs to the internal IDs of the workers
+	fileMap      map[int32]*SessionWorker
+	sharedWorker *SessionWorker
 }
 
-var handlerMap = map[cartaDefinitions.EventType]func(*Session, uint32, []byte) error{
-	cartaDefinitions.EventType_REGISTER_VIEWER:   (*Session).handleRegisterViewerMessage,
-	cartaDefinitions.EventType_FILE_LIST_REQUEST: (*Session).handleFileListRequest,
-	cartaDefinitions.EventType_FILE_INFO_REQUEST: (*Session).handleNotImplementedMessage,
-	cartaDefinitions.EventType_STOP_FILE_LIST:    (*Session).handleNotImplementedMessage,
-	cartaDefinitions.EventType_EMPTY_EVENT:       (*Session).handleStatusMessage,
+var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.EventType, uint32, []byte) error{
+	cartaDefinitions.EventType_REGISTER_VIEWER: (*Session).handleRegisterViewerMessage,
+	cartaDefinitions.EventType_OPEN_FILE:       (*Session).handleOpenFile,
+	// TODO: We need to handle CLOSE_FILE separately as well, because it will require shutting down a worker
+	cartaDefinitions.EventType_EMPTY_EVENT: (*Session).handleStatusMessage,
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {
 	// Register viewer messages are allowed without a worker connection
-	if s.WorkerConn == nil {
+	if s.sharedWorker == nil {
 		switch msg.(type) {
 		case *cartaDefinitions.RegisterViewer:
 			break
@@ -56,14 +56,10 @@ func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []by
 	return nil
 }
 
-func (s *Session) sendMessage(msg proto.Message, eventType cartaDefinitions.EventType, requestId uint32) error {
-	byteData, err := cartaHelpers.PrepareMessagePayload(msg, eventType, requestId)
-	if err != nil {
-		return err
-	}
-	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-	return s.WebSocket.WriteMessage(websocket.BinaryMessage, byteData)
+func (s *Session) HandleConnection() {
+	s.clientSendChan = make(chan []byte, 100)
+	go sendHandler(s.clientSendChan, s.WebSocket, "client")
+
 }
 
 func (s *Session) HandleMessage(msg []byte) error {
@@ -75,9 +71,10 @@ func (s *Session) HandleMessage(msg []byte) error {
 
 	handler, ok := handlerMap[prefix.EventType]
 	if !ok {
-		return fmt.Errorf("unsupported message type: %s (request id: %d)", prefix.EventType, prefix.RequestId)
+		// Any messages that don't have a specific handler are simply proxied to the worker
+		err = s.handleProxiedMessage(prefix.EventType, prefix.RequestId, msg[8:])
 	} else {
-		err = handler(s, prefix.RequestId, msg[8:])
+		err = handler(s, prefix.EventType, prefix.RequestId, msg[8:])
 	}
 
 	if err != nil {
@@ -87,11 +84,18 @@ func (s *Session) HandleMessage(msg []byte) error {
 }
 
 func (s *Session) HandleDisconnect() {
+	// Close the client channel to signal the sender goroutine to stop
+	if s.clientSendChan != nil {
+		close(s.clientSendChan)
+	}
+
 	if s.Info.WorkerId == "" {
 		return
 	}
-	if s.WorkerConn != nil {
-		helpers.CloseOrLog(s.WorkerConn)
+
+	// Close the worker channel to signal the sender goroutine to stop
+	if s.sharedWorker != nil {
+		s.sharedWorker.disconnect()
 	}
 
 	err := spawnerHelpers.RequestWorkerShutdown(s.Info.WorkerId, s.SpawnerAddress)

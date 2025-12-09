@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "idia-astro/go-carta/pkg/grpc"
+	pb "github.com/idia-astro/go-carta/pkg/grpc"
 )
 
 var fitsFileRegex = regexp.MustCompile(`(?i)\.(fits?(\.gz)?|fz)$`)
