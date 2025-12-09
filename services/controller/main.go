@@ -275,8 +275,10 @@ func main() {
 		log.Printf("Serving carta_frontend from %s\n", cfg.FrontendDir)
 		fs := http.FileServer(http.Dir(cfg.FrontendDir))
 
-		http.Handle("/oidc/login", http.HandlerFunc(oidcAuth.LoginHandler))
-		http.Handle("/oidc/callback", http.HandlerFunc(oidcAuth.CallbackHandler))
+		if cfg.AuthMode == config.AuthOIDC || cfg.AuthMode == config.AuthBoth {
+			http.Handle("/oidc/login", http.HandlerFunc(oidcAuth.LoginHandler))
+			http.Handle("/oidc/callback", http.HandlerFunc(oidcAuth.CallbackHandler))
+		}
 
 		// Root handler behaves like carta_backend:
 		//  - /           -> index.html
