@@ -275,7 +275,7 @@ func main() {
 		log.Printf("Serving carta_frontend from %s\n", cfg.FrontendDir)
 		fs := http.FileServer(http.Dir(cfg.FrontendDir))
 
-		if cfg.AuthMode == config.AuthOIDC || cfg.AuthMode == config.AuthBoth {
+		if oidcAuth != nil && (cfg.AuthMode == config.AuthOIDC || cfg.AuthMode == config.AuthBoth) {
 			http.Handle("/oidc/login", http.HandlerFunc(oidcAuth.LoginHandler))
 			http.Handle("/oidc/callback", http.HandlerFunc(oidcAuth.CallbackHandler))
 		}
@@ -284,13 +284,14 @@ func main() {
 		//  - /           -> index.html
 		//  - /static/... -> real files
 		//  - /whatever   -> index.html (for SPA routes)
+		// Wrap root with the currently-selected authenticator (PAM, OIDC, both, or none).
 		http.Handle("/", withAuth(authenticator, spaHandler{
 			root: cfg.FrontendDir,
 			fs:   fs,
 		}))
 
-		// Expose the PAM login page if PAM is enabled.
-		if pamAuth != nil {
+		// Expose the PAM login page only when PAM is enabled.
+		if pamAuth != nil && (cfg.AuthMode == config.AuthPAM || cfg.AuthMode == config.AuthBoth) {
 			http.Handle("/pam-login", pamLoginHandler(pamAuth))
 		}
 	} else {
