@@ -6,8 +6,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
-	"github.com/idia-astro/go-carta/services/controller/internal/spawnerHelpers"
+	"github.com/CARTAvis/go-carta/pkg/cartaDefinitions"
+	"github.com/CARTAvis/go-carta/services/controller/internal/spawnerHelpers"
 )
 
 // RegisterViewer is a special case as it is the first message we receive and is used to spin up the worker connection and set up the proxy handler
