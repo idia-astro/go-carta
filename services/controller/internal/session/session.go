@@ -9,15 +9,21 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
+	"github.com/idia-astro/go-carta/services/controller/internal/auth"
 	"github.com/idia-astro/go-carta/services/controller/internal/cartaHelpers"
 	"github.com/idia-astro/go-carta/services/controller/internal/spawnerHelpers"
 )
+
+type contextKey string
+
+const UserContextKey contextKey = "sessionUser"
 
 type Session struct {
 	Info           spawnerHelpers.WorkerInfo
 	SpawnerAddress string
 	BaseFolder     string
 	WebSocket      *websocket.Conn
+	User           *auth.User
 	Context        context.Context
 	clientSendChan chan []byte
 	// maps incoming file IDs to the internal IDs of the workers
@@ -30,6 +36,15 @@ var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.
 	cartaDefinitions.EventType_OPEN_FILE:       (*Session).handleOpenFile,
 	// TODO: We need to handle CLOSE_FILE separately as well, because it will require shutting down a worker
 	cartaDefinitions.EventType_EMPTY_EVENT: (*Session).handleStatusMessage,
+}
+
+func NewSession(conn *websocket.Conn, workerAddr string, folder string, user *auth.User) *Session {
+	return &Session{
+		WebSocket:      conn,
+		SpawnerAddress: workerAddr,
+		BaseFolder:     folder,
+		User:           user,
+	}
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {
@@ -59,7 +74,6 @@ func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []by
 func (s *Session) HandleConnection() {
 	s.clientSendChan = make(chan []byte, 100)
 	go sendHandler(s.clientSendChan, s.WebSocket, "client")
-
 }
 
 func (s *Session) HandleMessage(msg []byte) error {
