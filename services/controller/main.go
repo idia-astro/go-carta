@@ -40,10 +40,6 @@ type spaHandler struct {
 	fs   http.Handler
 }
 
-type rootHandler struct {
-	spa http.Handler // your spaHandler
-}
-
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// If this is a WebSocket upgrade (e.g. ws://localhost:8081), hand it to wsHandler
 	if websocket.IsWebSocketUpgrade(r) {
