@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -24,8 +23,6 @@ type Session struct {
 	SpawnerAddress string
 	BaseFolder     string
 	WebSocket      *websocket.Conn
-
-	sendMutex      sync.Mutex
 	User           *auth.User
 	Context        context.Context
 	clientSendChan chan []byte
@@ -41,7 +38,6 @@ var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.
 	cartaDefinitions.EventType_EMPTY_EVENT: (*Session).handleStatusMessage,
 }
 
-// XXX
 func NewSession(conn *websocket.Conn, workerAddr string, folder string, user *auth.User) *Session {
 	return &Session{
 		WebSocket:      conn,
@@ -78,7 +74,6 @@ func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []by
 func (s *Session) HandleConnection() {
 	s.clientSendChan = make(chan []byte, 100)
 	go sendHandler(s.clientSendChan, s.WebSocket, "client")
-
 }
 
 func (s *Session) HandleMessage(msg []byte) error {
