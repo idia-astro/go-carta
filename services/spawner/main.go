@@ -16,8 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/idia-astro/go-carta/services/spawner/internal/httpHelpers"
-	"github.com/idia-astro/go-carta/services/spawner/internal/processHelpers"
+	"github.com/CARTAvis/go-carta/services/spawner/internal/httpHelpers"
+	"github.com/CARTAvis/go-carta/services/spawner/internal/processHelpers"
 )
 
 var (

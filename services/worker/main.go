@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 
-	pb "github.com/idia-astro/go-carta/pkg/grpc"
-	utils "github.com/idia-astro/go-carta/pkg/shared"
-	"github.com/idia-astro/go-carta/services/worker/fitsWrapper"
+	pb "github.com/CARTAvis/go-carta/pkg/grpc"
+	utils "github.com/CARTAvis/go-carta/pkg/shared"
+	"github.com/CARTAvis/go-carta/services/worker/fitsWrapper"
 )
 
 var (

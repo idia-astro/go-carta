@@ -7,9 +7,9 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
-	helpers "github.com/idia-astro/go-carta/pkg/shared"
-	"github.com/idia-astro/go-carta/services/controller/internal/cartaHelpers"
+	"github.com/CARTAvis/go-carta/pkg/cartaDefinitions"
+	helpers "github.com/CARTAvis/go-carta/pkg/shared"
+	"github.com/CARTAvis/go-carta/services/controller/internal/cartaHelpers"
 )
 
 type SessionWorker struct {
