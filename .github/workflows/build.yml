@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt install -y protoc-gen-go protoc-gen-go-grpc libcfitsio-dev
+          sudo apt install -y protoc-gen-go protoc-gen-go-grpc libcfitsio-dev libpam0g-dev
       - name: Build gRPC files
         run: make proto
       - name: Build services
