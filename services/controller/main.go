@@ -142,7 +142,7 @@ func pamLoginHandler(p *authpam.PAMAuthenticator) http.Handler {
 		switch r.Method {
 		case http.MethodGet:
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprint(w, `
+			_, _ = fmt.Fprint(w, `
 <!DOCTYPE html>
 <html>
   <head><title>CARTA Login</title></head>
