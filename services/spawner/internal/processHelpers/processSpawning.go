@@ -38,9 +38,13 @@ func parsePortFromLine(line string) (int, bool) {
 // returned.
 func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Duration, baseFolder string) (*exec.Cmd, int, error) {
 	args := []string{"--debug_no_auth"}
+	args = append(args, "--no_frontend")
 	if baseFolder != "" {
 		args = append(args, "--base", baseFolder)
 	}
+
+	log.Printf("\n\n ***** Spawning worker process: %s %v\n\nn", workerPath, args)
+
 	cmd := exec.CommandContext(ctx, workerPath, args...)
 
 	// Capture stdout/stderr so we can watch for the readiness log while still
