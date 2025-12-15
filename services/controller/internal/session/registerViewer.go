@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"log"
+	"context"
 
 	"github.com/gorilla/websocket"
 
@@ -26,10 +27,26 @@ func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requ
 
 	log.Printf("Worker %s started for session %v and is available at %s:%d", info.WorkerId, payload.SessionId, info.Address, info.Port)
 	addr := fmt.Sprintf("ws://%s:%d", info.Address, info.Port)
-	workerConn, _, err := websocket.DefaultDialer.DialContext(s.Context, addr, nil)
+
+
+	log.Printf("\n\n\n ******* Connecting to worker at %s", addr)
+
+ctx := s.Context
+if ctx == nil {
+    // Failsafe so we never panic
+    ctx = context.Background()
+	log.Printf("Session context was nil, using background context")
+}
+
+	workerConn, _, err := websocket.DefaultDialer.DialContext(ctx, addr, nil)
+	log.Printf("\n\n\n ******* Connected to worker at %s", addr)
+
+
 	if err != nil {
 		return fmt.Errorf("could not connect to worker at %s: %w", addr, err)
 	}
+	log.Printf("Connected to worker at %s", addr)
+
 
 	s.sharedWorker = &SessionWorker{
 		conn:           workerConn,
