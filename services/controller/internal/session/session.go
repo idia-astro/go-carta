@@ -38,6 +38,7 @@ var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.
 	cartaDefinitions.EventType_EMPTY_EVENT: (*Session).handleStatusMessage,
 }
 
+<<<<<<< HEAD
 func NewSession(
     ctx context.Context,
     ws *websocket.Conn,
@@ -63,6 +64,17 @@ func NewSession(
 }
 
 
+=======
+func NewSession(conn *websocket.Conn, workerAddr string, folder string, user *auth.User) *Session {
+	return &Session{
+		WebSocket:      conn,
+		SpawnerAddress: workerAddr,
+		BaseFolder:     folder,
+		User:           user,
+	}
+}
+
+>>>>>>> main
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {
 	// Register viewer messages are allowed without a worker connection
 	if s.sharedWorker == nil {
