@@ -82,7 +82,7 @@ func main() {
 			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error connecting to worker")
 			return
 		}
-		log.Printf("[carta-spawn] +++ Connected to worker on port: %d\n\n", port)
+		log.Printf("Connected to worker on port: %d\n", port)
 		workerId := uuid.New()
 		workerMap[workerId.String()] = &WorkerInfo{
 			Process: cmd,
@@ -94,11 +94,8 @@ func main() {
 		if workerHostname == "" {
 			workerHostname = "localhost"
 		}
-		log.Printf("[carta-spawn] Worker %s is available at %s:%d\n", workerId.String(), workerHostname, port)
 
 		httpHelpers.WriteOutput(w, map[string]any{"port": port, "address": workerHostname, "workerId": workerId.String()})
-
-		log.Printf("[carta-spawn] Worker %s started in %v and is available at %s:%d\n", workerId.String(), time.Since(startTime), workerHostname, port)
 	})
 
 	// List all workers
@@ -161,7 +158,6 @@ func main() {
 
 	// Stop a specific worker
 	r.Delete("/worker/{id}", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[carta-spawn] Received request to stop worker\n")
 		workerId := chi.URLParam(r, "id")
 		info := workerMap[workerId]
 		if info == nil {
@@ -174,7 +170,7 @@ func main() {
 		elapsed := time.Since(start)
 
 		if err != nil {
-			log.Printf("[carta-spawn] Error stopping worker: %v\n", err)
+			log.Printf("Error stopping worker: %v\n", err)
 			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error stopping worker")
 			return
 		}
@@ -182,8 +178,6 @@ func main() {
 
 		httpHelpers.WriteTimings(w, httpHelpers.Timings{"stop-time": elapsed})
 		httpHelpers.WriteOutput(w, map[string]any{"msg": "Worker stopped"})
-
-		log.Printf("[carta-spawn] Worker %s stopped in %v\n", workerId, elapsed)
 	})
 
 	server := &http.Server{
@@ -234,14 +228,14 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[carta-spawn] HTTP server Shutdown error: %v", err)
+		log.Printf("HTTP server Shutdown error: %v", err)
 	} else {
-		log.Println("[carta-spawn] HTTP server shut down gracefully")
+		log.Println("HTTP server shut down gracefully")
 	}
 	cancel()
 
 	// Wait a moment to ensure all logs are printed before exiting
 	time.Sleep(1 * time.Second)
 
-	log.Println("[carta-spawn] Spawner exited gracefully")
+	log.Println("Spawner exited gracefully")
 }
