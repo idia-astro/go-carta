@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"context"
-
 	"github.com/gorilla/websocket"
 
 	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
@@ -25,21 +24,21 @@ func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requ
 	}
 	s.Info = info
 
-	log.Printf("Worker %s started for session %v and is available at %s:%d", info.WorkerId, payload.SessionId, info.Address, info.Port)
+	log.Printf("[carta-man] Worker %s started for session %v and is available at %s:%d", info.WorkerId, payload.SessionId, info.Address, info.Port)
 	addr := fmt.Sprintf("ws://%s:%d", info.Address, info.Port)
 
 
-	log.Printf("\n\n\n ******* Connecting to worker at %s", addr)
+	log.Printf("[carta-man] ******* Connecting to worker at %s", addr)
 
-ctx := s.Context
-if ctx == nil {
-    // Failsafe so we never panic
-    ctx = context.Background()
-	log.Printf("Session context was nil, using background context")
-}
+	ctx := s.Context
+	if ctx == nil {
+		// Failsafe so we never panic
+		ctx = context.Background()
+		log.Printf("[carta-man] Session context was nil, using background context")
+	}
 
 	workerConn, _, err := websocket.DefaultDialer.DialContext(ctx, addr, nil)
-	log.Printf("\n\n\n ******* Connected to worker at %s", addr)
+	log.Printf("[carta-man] ******* Connected to worker at %s", addr)
 
 
 	if err != nil {
@@ -53,6 +52,9 @@ if ctx == nil {
 		clientSendChan: s.clientSendChan,
 		fileRequest:    nil,
 	}
+	
 	s.sharedWorker.handleInit()
+
+	log.Printf("[carta-man] ******* Set up shared worker connection for session %v (2)", payload.SessionId)
 	return s.sharedWorker.proxyMessageToWorker(&payload, cartaDefinitions.EventType_REGISTER_VIEWER, requestId)
 }
