@@ -18,13 +18,13 @@ import (
 
 	"github.com/idia-astro/go-carta/services/controller/internal/auth"
 	authoidc "github.com/idia-astro/go-carta/services/controller/internal/auth/oidc"
-	authpam "github.com/idia-astro/go-carta/services/controller/internal/auth/pam"
+	pamwrap "github.com/idia-astro/go-carta/services/controller/internal/auth/pamwrap"
 )
 
 var (
 	runtimeSpawnerAddress string
 	runtimeBaseFolder     string
-	pamAuth               *authpam.PAMAuthenticator
+	pamAuth               pamwrap.Authenticator
 )
 
 var upgrader = websocket.Upgrader{
@@ -73,13 +73,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Print("upgrade:", err)
 		return
 	}
-	defer c.Close()
-	
+	log.Print("Client connected")
+
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
 
-	s := session.NewSession(r.Context(),c, runtimeSpawnerAddress, runtimeBaseFolder, user)
-	log.Printf("Created new session for user: %v", user)
-	log.Printf(".   -----   %+v\n", s)
+	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
 
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
@@ -88,7 +86,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	for {
 		messageType, message, err := c.ReadMessage()
 		if err != nil {
-			log.Println("[carta-man] Error reading message:", err)
+			log.Println("Error reading message:", err)
 			break
 		}
 
@@ -108,20 +106,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		go func() {
-			log.Printf("\n\n\n ******* Received binary message of length %d", len(message))
-
-
 			err := s.HandleMessage(message)
 			if err != nil {
 				log.Printf("Failed to handle message: %v\n", err)
 			}
-			log.Printf("\n\n\n ******* Finished handling binary message of length %d", len(message))
-
 		}()
 	}
 
 	// defer should shut down the worker afterwards
-	log.Print("[carta-man] Client disconnected")
+	log.Print("Client disconnected")
 }
 
 func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
@@ -144,7 +137,7 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 	})
 }
 
-func pamLoginHandler(p *authpam.PAMAuthenticator) http.Handler {
+func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -182,7 +175,7 @@ func pamLoginHandler(p *authpam.PAMAuthenticator) http.Handler {
 				return
 			}
 
-			if err := authpam.SetPAMSessionCookie(w, user.Username); err != nil {
+			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
 				log.Printf("Failed to set PAM session cookie: %v", err)
 				http.Error(w, "Session error", http.StatusInternalServerError)
 				return
@@ -230,24 +223,45 @@ func main() {
 	case config.AuthNone:
 		authenticator = auth.NoopAuthenticator{}
 	case config.AuthPAM:
-		p := authpam.New(cfg.PAM)
+		p, err := pamwrap.New(cfg.PAM)
+		if err != nil {
+			log.Fatalf("PAM is not available on this platform: %v", err)
+		}
 		pamAuth = p
 		authenticator = p
+
 	case config.AuthOIDC:
 		o := authoidc.New(cfg.OIDC)
 		oidcAuth = o
 		authenticator = o
+
 	case config.AuthBoth:
-		// You can extend this later; for now leave as-is or combine PAM + OIDC
+		p, err := pamwrap.New(cfg.PAM)
+		if err != nil {
+			log.Fatalf("Auth mode 'both' requires PAM, but PAM is not available on this platform: %v", err)
+		}
+		pamAuth = p
 		authenticator = auth.Multi(
-			authpam.New(cfg.PAM),
+			p,
 			authoidc.New(cfg.OIDC),
 		)
+
 	default:
 		log.Fatalf("Unknown authMode %q", cfg.AuthMode)
 	}
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
+
+		/*		=======
+				func main() {
+					flag.Parse()
+					id := uuid.New()
+					log.Printf("Starting controller with UUID: %s\n", id.String())
+
+					// Default baseFolder to $HOME if unset
+					if len(strings.TrimSpace(*baseFolder)) == 0 {
+				>>>>>>> origin/main
+		*/
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
