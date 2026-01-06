@@ -39,6 +39,10 @@ func parsePortFromLine(line string) (int, bool) {
 func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Duration, baseFolder string) (*exec.Cmd, int, error) {
 	args := []string{"--debug_no_auth"}
 	args = append(args, "--no_frontend")
+	args = append(args, "--verbosity", "5")
+	args = append(args, "--exit_timeout", "10")
+	args = append(args, "--initial_timeout", "20")
+	args = append(args, "--idle_timeout", "300")
 	if baseFolder != "" {
 		args = append(args, "--base", baseFolder)
 	}
@@ -67,6 +71,8 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 	// (carries the detected port).
 	readyCh := make(chan int, 1)
 
+	log.Println("[carta-spawn] ***** Worker process started, waiting for readiness...\n\n")
+
 	// TODO: I need to go over this code a bit more
 	// Helper to scan a pipe, forward lines, and watch for readiness.
 	watch := func(r io.Reader, w io.Writer) {
@@ -74,26 +80,33 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 		for s.Scan() {
 			line := s.Text()
 			// Forward the line to the appropriate writer.
+			//log.Printf("[carta-spawn] %s\n", line)	
 			_, err := fmt.Fprintln(w, line)
 			if err != nil {
 				return
 			}
 			// Detect readiness: parse port from log line.
+			log.Printf("[carta-spawn] Scanning line for port info: %s\n\n", line)
 			if p, ok := parsePortFromLine(line); ok {
-				log.Printf("Detected worker port from log: %d\n", p)
+				log.Printf("[carta-spawn] +++++++++ Detected worker port from log: %d\n\n", p)
 				// Send detected port if not already sent.
 				select {
 				case readyCh <- p:
 				default:
 				}
 			}
+			log.Printf("[carta-spawn] Finished scanning line: %s\n", line)
 		}
 	}
+
+	log.Println("[carta-spawn] ***** Starting to watch worker stdout/stderr for readiness...\n\n")
 
 	// Start scanning goroutines.
 	go watch(stdoutPipe, os.Stdout)
 	go watch(stderrPipe, os.Stderr)
 
+	log.Println("[carta-spawn] ***** Watching worker output for readiness...\n\n")
+	
 	// Wait for readiness or timeout; kill the worker on failure.
 	ctxReady, cancel := context.WithTimeout(ctx, timeoutDuration)
 	defer cancel()
