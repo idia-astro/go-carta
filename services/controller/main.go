@@ -73,11 +73,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Print("upgrade:", err)
 		return
 	}
+
 	log.Print("Client connected")
+
+	defer c.Close()
 
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
 
 	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
+
 
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
@@ -251,17 +255,6 @@ func main() {
 	}
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
-
-		/*		=======
-				func main() {
-					flag.Parse()
-					id := uuid.New()
-					log.Printf("Starting controller with UUID: %s\n", id.String())
-
-					// Default baseFolder to $HOME if unset
-					if len(strings.TrimSpace(*baseFolder)) == 0 {
-				>>>>>>> origin/main
-		*/
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
