@@ -105,21 +105,19 @@ func (s *Session) HandleMessage(msg []byte) error {
 	if !ok {
 		// Any messages that don't have a specific handler are simply proxied to the worker
 
-		log.Printf("\n\n\n ******* No specific handler for message type %v, proxying to worker", prefix.EventType)
+		log.Printf("\n\n\n[carta-man] ******* No specific handler for message type %v, proxying to worker", prefix.EventType)
 
 
 		err = s.handleProxiedMessage(prefix.EventType, prefix.RequestId, msg[8:])
 	} else {
-		log.Printf("\n\n\n ******* Found specific handler for message type %v, handling in session", prefix.EventType)
-
-
+		log.Printf("\n\n\n[carta-man] ******* Found specific handler for message type %v, handling in session", prefix.EventType)
 
 		err = handler(s, prefix.EventType, prefix.RequestId, msg[8:])
 	}
 
 	if err != nil {
 
-		log.Printf("\n\n\n ******* Error handling message of type %v with request ID %d: %v", prefix.EventType, prefix.RequestId, err)
+		log.Printf("\n\n\n[carta-man] ******* Error handling message of type %v with request ID %d: %v", prefix.EventType, prefix.RequestId, err)
 
 		return fmt.Errorf("error handling message: %v", err)
 	}
