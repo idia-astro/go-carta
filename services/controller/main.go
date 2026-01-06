@@ -250,20 +250,7 @@ func main() {
 	}
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
-<<<<<<< HEAD
-=======
 
-		/*		=======
-				func main() {
-					flag.Parse()
-					id := uuid.New()
-					log.Printf("Starting controller with UUID: %s\n", id.String())
-
-					// Default baseFolder to $HOME if unset
-					if len(strings.TrimSpace(*baseFolder)) == 0 {
-				>>>>>>> origin/main
-		*/
->>>>>>> main
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
