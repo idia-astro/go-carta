@@ -73,9 +73,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Print("upgrade:", err)
 		return
 	}
-	log.Print("Client connected")
-	log.Printf(".   -----   %+v\n", r)
-
+	defer c.Close()
+	
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
 
 	s := session.NewSession(r.Context(),c, runtimeSpawnerAddress, runtimeBaseFolder, user)
@@ -89,7 +88,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	for {
 		messageType, message, err := c.ReadMessage()
 		if err != nil {
-			log.Println("Error reading message:", err)
+			log.Println("[carta-man] Error reading message:", err)
 			break
 		}
 
@@ -122,7 +121,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// defer should shut down the worker afterwards
-	log.Print("Client disconnected")
+	log.Print("[carta-man] Client disconnected")
 }
 
 func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
@@ -249,17 +248,6 @@ func main() {
 	}
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
-
-		/*		=======
-				func main() {
-					flag.Parse()
-					id := uuid.New()
-					log.Printf("Starting controller with UUID: %s\n", id.String())
-
-					// Default baseFolder to $HOME if unset
-					if len(strings.TrimSpace(*baseFolder)) == 0 {
-				>>>>>>> origin/main
-		*/
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
