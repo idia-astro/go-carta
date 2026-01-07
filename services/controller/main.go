@@ -73,11 +73,18 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Print("upgrade:", err)
 		return
 	}
-	log.Print("Client connected")
+
+	defer func() {
+		if err := c.Close(); err != nil {
+			log.Printf("Error closing WebSocket: %v", err)
+		}
+	}()
 
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
 
-	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
+	s := session.NewSession(r.Context(), c, runtimeSpawnerAddress, runtimeBaseFolder, user)
+	log.Printf("Created new session for user: %v", user)
+	log.Printf(".   -----   %+v\n", s)
 
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
@@ -86,7 +93,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	for {
 		messageType, message, err := c.ReadMessage()
 		if err != nil {
-			log.Println("Error reading message:", err)
+			log.Println("[carta-man] Error reading message:", err)
 			break
 		}
 
@@ -106,15 +113,19 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		go func() {
+			log.Printf("\n\n\n ******* Received binary message of length %d", len(message))
+
 			err := s.HandleMessage(message)
 			if err != nil {
 				log.Printf("Failed to handle message: %v\n", err)
 			}
+			log.Printf("\n\n\n ******* Finished handling binary message of length %d", len(message))
+
 		}()
 	}
 
 	// defer should shut down the worker afterwards
-	log.Print("Client disconnected")
+	log.Print("[carta-man] Client disconnected")
 }
 
 func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
@@ -242,16 +253,6 @@ func main() {
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
 
-		/*		=======
-				func main() {
-					flag.Parse()
-					id := uuid.New()
-					log.Printf("Starting controller with UUID: %s\n", id.String())
-
-					// Default baseFolder to $HOME if unset
-					if len(strings.TrimSpace(*baseFolder)) == 0 {
-				>>>>>>> origin/main
-		*/
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
