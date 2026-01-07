@@ -63,6 +63,7 @@ func (sw *SessionWorker) workerMessageHandler() {
 				log.Printf("invalid ICD version: %d", prefix.IcdVersion)
 				return
 			}
+			log.Printf("Received message from worker with event type: %v", prefix.EventType)
 
 			var workerName string
 			if sw.fileRequest != nil {
