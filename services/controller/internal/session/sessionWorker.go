@@ -26,6 +26,7 @@ func (sw *SessionWorker) proxyMessageToWorker(msg proto.Message, eventType carta
 		return err
 	}
 
+	log.Printf("Proxying message for event type %v from session to worker", eventType)
 	sw.sendChan <- byteData
 	return nil
 }
@@ -73,7 +74,10 @@ func (sw *SessionWorker) workerMessageHandler() {
 
 			// Special case for register viewer: send the open file payload once the worker is ready
 
+			log.Printf("Received message for event type %v from worker %s fileRequest == %v", prefix.EventType, workerName, sw.fileRequest)
+
 			if sw.fileRequest != nil && prefix.EventType == cartaDefinitions.EventType_REGISTER_VIEWER_ACK {
+				log.Printf("Proxying OPEN_FILE message to worker %s after REGISTER_VIEWER_ACK", workerName)
 				err = sw.proxyMessageToWorker(sw.fileRequest, cartaDefinitions.EventType_OPEN_FILE, sw.requestId)
 				if err != nil {
 					log.Printf("Error proxying open file message to worker: %v", err)
@@ -82,6 +86,9 @@ func (sw *SessionWorker) workerMessageHandler() {
 				// TODO: We will often need to adjust responses here
 				// Pass the incoming message along to the client
 				log.Printf("Proxying message for event type %v from worker %s to client", prefix.EventType, workerName)
+				//	log.Printf("DELAY")
+				//	time.Sleep(1000 * time.Millisecond) // slight delay to avoid message clumping
+
 				sw.clientSendChan <- message
 			}
 		}()

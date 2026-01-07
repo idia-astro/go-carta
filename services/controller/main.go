@@ -82,7 +82,6 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
 
-
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
 
@@ -96,6 +95,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Ping/pong sequence
 		if messageType == websocket.TextMessage && string(message) == "PING" {
+			log.Printf("Received PING from client, sending PONG\n")
 			err := c.WriteMessage(websocket.TextMessage, []byte("PONG"))
 			if err != nil {
 				log.Printf("Failed to send pong message: %v\n", err)

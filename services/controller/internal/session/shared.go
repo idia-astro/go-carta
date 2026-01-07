@@ -12,11 +12,13 @@ import (
 )
 
 func sendHandler(channel <-chan []byte, conn *websocket.Conn, name string) {
+	log.Printf("Starting send handler for %s", name)
 	for byteData := range channel {
 		byteLength := len(byteData)
 		err := conn.WriteMessage(websocket.BinaryMessage, byteData)
 		remaining := len(channel)
-		log.Printf("Sent message of length %v bytes to %s, %d buffered messages remaining", byteLength, name, remaining)
+		log.Printf("Sent message of length %v bytes to %s, %d buffered messages remaining : \"%s\"",
+			byteLength, name, remaining, string(byteData))
 		if err != nil {
 			log.Printf("Error sending message to %s: %v", name, err)
 			// Continue processing other messages even if one fails
