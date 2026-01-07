@@ -82,7 +82,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
 
-	s := session.NewSession(r.Context(), c, runtimeSpawnerAddress, runtimeBaseFolder, user)
+	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
 	log.Printf("Created new session for user: %v", user)
 	log.Printf(".   -----   %+v\n", s)
 
