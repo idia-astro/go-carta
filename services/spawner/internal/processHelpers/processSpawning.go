@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/idia-astro/go-carta/pkg/shared"
+	helpers "github.com/idia-astro/go-carta/pkg/shared"
 )
 
 // package-scope regex and parser for worker readiness log lines
@@ -71,7 +71,7 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 	// (carries the detected port).
 	readyCh := make(chan int, 1)
 
-	log.Println("[carta-spawn] ***** Worker process started, waiting for readiness...\n\n")
+	log.Println("[carta-spawn] ***** Worker process started, waiting for readiness...")
 
 	// TODO: I need to go over this code a bit more
 	// Helper to scan a pipe, forward lines, and watch for readiness.
@@ -80,7 +80,7 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 		for s.Scan() {
 			line := s.Text()
 			// Forward the line to the appropriate writer.
-			//log.Printf("[carta-spawn] %s\n", line)	
+			//log.Printf("[carta-spawn] %s\n", line)
 			_, err := fmt.Fprintln(w, line)
 			if err != nil {
 				return
@@ -99,14 +99,14 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 		}
 	}
 
-	log.Println("[carta-spawn] ***** Starting to watch worker stdout/stderr for readiness...\n\n")
+	log.Println("[carta-spawn] ***** Starting to watch worker stdout/stderr for readiness...")
 
 	// Start scanning goroutines.
 	go watch(stdoutPipe, os.Stdout)
 	go watch(stderrPipe, os.Stderr)
 
-	log.Println("[carta-spawn] ***** Watching worker output for readiness...\n\n")
-	
+	log.Println("[carta-spawn] ***** Watching worker output for readiness...")
+
 	// Wait for readiness or timeout; kill the worker on failure.
 	ctxReady, cancel := context.WithTimeout(ctx, timeoutDuration)
 	defer cancel()

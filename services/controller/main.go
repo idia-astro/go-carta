@@ -74,13 +74,17 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Print("Client connected")
-
-	defer c.Close()
+	defer func() {
+		if err := c.Close(); err != nil {
+			log.Printf("Error closing WebSocket: %v", err)
+		}
+	}()
 
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
 
-	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
+	s := session.NewSession(r.Context(), c, runtimeSpawnerAddress, runtimeBaseFolder, user)
+	log.Printf("Created new session for user: %v", user)
+	log.Printf(".   -----   %+v\n", s)
 
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
