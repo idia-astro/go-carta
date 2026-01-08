@@ -30,6 +30,7 @@ var (
 var upgrader = websocket.Upgrader{
 	// Ignore Origin header
 	CheckOrigin: func(r *http.Request) bool {
+		log.Printf("Upgrading WebSocket connection from Origin: %s", r.Header.Get("Origin"))
 		return true
 	},
 }
@@ -42,7 +43,9 @@ type spaHandler struct {
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// If this is a WebSocket upgrade (e.g. ws://localhost:8081), hand it to wsHandler
+	log.Printf("spaHandler: Received request for %s", r.URL.Path)
 	if websocket.IsWebSocketUpgrade(r) {
+		log.Printf("** Upgrading to WebSocket for %s", r.URL.Path)
 		wsHandler(w, r)
 		return
 	}
@@ -68,6 +71,7 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("** Handling WebSocket connection from %s", r.RemoteAddr)
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
@@ -146,6 +150,7 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 }
 
 func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
+	log.Printf("Setting up PAM login handler")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -191,6 +196,7 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 
 			http.Redirect(w, r, "/", http.StatusFound)
 		default:
+			log.Printf("Unsupported PAM login method: %s", r.Method)
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})

@@ -41,6 +41,7 @@ func (sw *SessionWorker) workerMessageHandler() {
 
 		// Ping/pong sequence
 		if messageType == websocket.TextMessage && string(message) == "PING" {
+			log.Printf("Received PING from worker, sending PONG\n")
 			err := sw.conn.WriteMessage(websocket.TextMessage, []byte("PONG"))
 			if err != nil {
 				log.Printf("Failed to send pong message: %v\n", err)
@@ -86,7 +87,7 @@ func (sw *SessionWorker) workerMessageHandler() {
 			} else {
 				// TODO: We will often need to adjust responses here
 				// Pass the incoming message along to the client
-				log.Printf("Proxying message for event type %v from worker %s to client", prefix.EventType, workerName)
+				log.Printf("Proxying message for event type %v from worker %s to client : length= %d", prefix.EventType, workerName, len(message))
 				//	log.Printf("DELAY")
 				//	time.Sleep(1000 * time.Millisecond) // slight delay to avoid message clumping
 

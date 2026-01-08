@@ -15,6 +15,8 @@ func sendHandler(channel <-chan []byte, conn *websocket.Conn, name string) {
 	log.Printf("Starting send handler for %s", name)
 	for byteData := range channel {
 		byteLength := len(byteData)
+		log.Printf("Sending message of length %v bytes to %s: \"%s\"",
+			byteLength, name, string(byteData))
 		err := conn.WriteMessage(websocket.BinaryMessage, byteData)
 		remaining := len(channel)
 		log.Printf("Sent message of length %v bytes to %s, %d buffered messages remaining : \"%s\"",
