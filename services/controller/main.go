@@ -93,6 +93,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Created new session for user: %v", user)
 	log.Printf(".   -----   %+v\n", s)
 
+	// Send messages back to client through websocket
+	s.HandleConnection()
+
 	// Close worker on exit if it exists
 	defer s.HandleDisconnect()
 
