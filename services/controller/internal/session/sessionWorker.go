@@ -87,10 +87,6 @@ func (sw *SessionWorker) workerMessageHandler() {
 			} else {
 				// TODO: We will often need to adjust responses here
 				// Pass the incoming message along to the client
-				log.Printf("Proxying message for event type %v from worker %s to client : length= %d", prefix.EventType, workerName, len(message))
-				//	log.Printf("DELAY")
-				//	time.Sleep(1000 * time.Millisecond) // slight delay to avoid message clumping
-
 				sw.clientSendChan <- message
 			}
 		}()
@@ -99,7 +95,6 @@ func (sw *SessionWorker) workerMessageHandler() {
 
 func (sw *SessionWorker) handleInit() {
 	sw.sendChan = make(chan []byte, 100)
-
 	// Start up the message sender and proxy handler
 	var workerName string
 	if sw.fileRequest != nil {
