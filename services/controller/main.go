@@ -43,20 +43,23 @@ type spaHandler struct {
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// If this is a WebSocket upgrade (e.g. ws://localhost:8081), hand it to wsHandler
-	log.Printf("spaHandler: Received request for %s", r.URL.Path)
+	log.Printf("** spaHandler: Received request for %s", r.URL.Path)
 	if websocket.IsWebSocketUpgrade(r) {
 		log.Printf("** Upgrading to WebSocket for %s", r.URL.Path)
 		wsHandler(w, r)
 		return
 	}
 
+	log.Printf("** spaHandler: Serving HTTP request for %s", r.URL.Path)
 	// Clean and resolve requested path
 	path := r.URL.Path
 	if path == "" || path == "/" {
+		log.Printf("** Serving root path, returning index.html")
+		log.Printf("** Serving root %s", filepath.Join(h.root, "index.html"))
 		http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
 		return
 	}
-
+	
 	// Map URL path to filesystem path
 	fullPath := filepath.Join(h.root, filepath.Clean(path))
 
