@@ -25,6 +25,8 @@ type Session struct {
 	WebSocket      *websocket.Conn
 	User           *auth.User
 	Context        context.Context
+	Cancel         context.CancelFunc
+	
 	clientSendChan chan []byte
 	// maps incoming file IDs to the internal IDs of the workers
 	fileMap      map[int32]*SessionWorker
@@ -39,12 +41,15 @@ var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.
 }
 
 func NewSession(conn *websocket.Conn, workerAddr string, folder string, user *auth.User) *Session {
-	return &Session{
-		WebSocket:      conn,
-		SpawnerAddress: workerAddr,
-		BaseFolder:     folder,
-		User:           user,
-	}
+    ctx, cancel := context.WithCancel(context.Background())
+    return &Session{
+        WebSocket:      conn,
+        SpawnerAddress: workerAddr,
+        BaseFolder:     folder,
+        User:           user,
+        Context:        ctx,
+        Cancel:         cancel,
+    }
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {

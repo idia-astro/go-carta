@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 )
@@ -15,7 +16,7 @@ var sessionSecret = []byte("CHANGE-ME-TO-A-RANDOM-SECRET")
 // GenerateSessionToken creates a signed token for a username with an expiry time.
 func GenerateSessionToken(username string, expiry time.Time) (string, error) {
 	payload := fmt.Sprintf("%s|%d", username, expiry.Unix())
-
+	log.Printf("Generating session token with payload: %s", payload)
 	mac := hmac.New(sha256.New, sessionSecret)
 	mac.Write([]byte(payload))
 	sig := mac.Sum(nil)
@@ -46,6 +47,7 @@ func VerifySessionToken(token string) (string, error) {
 
 	payload := username + "|" + expiryStr
 
+	log.Printf("Verifying session token with payload: %s", payload)
 	mac := hmac.New(sha256.New, sessionSecret)
 	mac.Write([]byte(payload))
 	expected := mac.Sum(nil)
