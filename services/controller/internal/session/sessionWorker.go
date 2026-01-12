@@ -2,7 +2,7 @@ package session
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -26,7 +26,7 @@ func (sw *SessionWorker) proxyMessageToWorker(msg proto.Message, eventType carta
 		return err
 	}
 
-	log.Printf("Proxying message for event type %v from session to worker", eventType)
+	slog.Debug("Proxying message from session to worker", "eventType", eventType)
 	sw.sendChan <- byteData
 	return nil
 }
@@ -35,37 +35,37 @@ func (sw *SessionWorker) workerMessageHandler() {
 	for {
 		messageType, message, err := sw.conn.ReadMessage()
 		if err != nil {
-			log.Println("Error reading message from worker:", err)
+			slog.Error("Error reading message from worker", "error", err)
 			break
 		}
 
 		// Ping/pong sequence
 		if messageType == websocket.TextMessage && string(message) == "PING" {
-			log.Printf("Received PING from worker, sending PONG\n")
+			slog.Debug("Received PING from worker, sending PONG")
 			err := sw.conn.WriteMessage(websocket.TextMessage, []byte("PONG"))
 			if err != nil {
-				log.Printf("Failed to send pong message: %v\n", err)
+				slog.Error("Failed to send pong message", "error", err)
 			}
 			continue
 		}
 
 		// Ignore all other non-binary messages
 		if messageType != websocket.BinaryMessage {
-			log.Printf("Ignoring non-binary message: %s\n", message)
+			slog.Warn("Ignoring non-binary message", "messageType", messageType, "message", string(message))
 			continue
 		}
 
 		go func() {
 			prefix, err := cartaHelpers.DecodeMessagePrefix(message)
 			if err != nil {
-				log.Printf("failed to unmarshal message: %v", err)
+				slog.Error("failed to unmarshal message", "error", err)
 				return
 			}
 			if prefix.IcdVersion != cartaHelpers.IcdVersion {
-				log.Printf("invalid ICD version: %d", prefix.IcdVersion)
+				slog.Error("invalid ICD version", "version", prefix.IcdVersion)
 				return
 			}
-			log.Printf("Received message from worker with event type: %v", prefix.EventType)
+			slog.Debug("Received message from worker", "eventType", prefix.EventType)
 
 			var workerName string
 			if sw.fileRequest != nil {
@@ -76,13 +76,13 @@ func (sw *SessionWorker) workerMessageHandler() {
 
 			// Special case for register viewer: send the open file payload once the worker is ready
 
-			log.Printf("Received message for event type %v from worker %s fileRequest == %v", prefix.EventType, workerName, sw.fileRequest)
+			slog.Debug("Received message from worker", "eventType", prefix.EventType, "workerName", workerName, "hasFileRequest", sw.fileRequest != nil)
 
 			if sw.fileRequest != nil && prefix.EventType == cartaDefinitions.EventType_REGISTER_VIEWER_ACK {
-				log.Printf("Proxying OPEN_FILE message to worker %s after REGISTER_VIEWER_ACK", workerName)
+				slog.Debug("Proxying OPEN_FILE message to worker after REGISTER_VIEWER_ACK", "workerName", workerName)
 				err = sw.proxyMessageToWorker(sw.fileRequest, cartaDefinitions.EventType_OPEN_FILE, sw.requestId)
 				if err != nil {
-					log.Printf("Error proxying open file message to worker: %v", err)
+					slog.Error("Error proxying open file message to worker", "error", err)
 				}
 			} else {
 				// TODO: We will often need to adjust responses here

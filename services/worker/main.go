@@ -3,8 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
+	"os"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -29,22 +30,28 @@ type fileListServer struct {
 
 func main() {
 	flag.Parse()
+
+	logger := utils.NewLogger("worker", "debug")
+	slog.SetDefault(logger)
+
 	fitsWrapper.TestWrapper("/Users/angus/cubes/m422.fits")
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		slog.Error("failed to listen", "error", err)
+		os.Exit(1)
 	}
 	defer utils.CloseOrLog(listener)
 
 	id := uuid.New()
-	log.Printf("Starting worker with instance ID: %s\n", id.String())
+	slog.Info("Starting worker with instance ID", "instanceId", id.String())
 
 	// Set up gRPC server
 	s := grpc.NewServer()
 	pb.RegisterFileListServiceServer(s, &fileListServer{instanceId: id})
 	pb.RegisterFileInfoServiceServer(s, &fileInfoServer{instanceId: id})
-	log.Printf("server listening at %v", listener.Addr())
+	slog.Info("server listening", "address", listener.Addr())
 	if err := s.Serve(listener); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		slog.Error("failed to serve", "error", err)
+		os.Exit(1)
 	}
 }

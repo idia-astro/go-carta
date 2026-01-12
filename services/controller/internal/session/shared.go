@@ -2,7 +2,7 @@ package session
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
 
@@ -12,15 +12,15 @@ import (
 )
 
 func sendHandler(channel <-chan []byte, conn *websocket.Conn, name string) {
-	log.Printf("** Starting send handler for %s for channel %p", name, channel)
+	slog.Debug("Starting send handler", "name", name, "channel", fmt.Sprintf("%p", channel))
 	for byteData := range channel {
 		err := conn.WriteMessage(websocket.BinaryMessage, byteData)
 		if err != nil {
-			log.Printf("Error sending message to %s on channel %p: %v", name, channel, err)
+			slog.Error("Error sending message", "name", name, "channel", fmt.Sprintf("%p", channel), "error", err)
 			// Continue processing other messages even if one fails
 		}
 	}
-	log.Printf("Send handler for %s exiting", name)
+	slog.Debug("Send handler exiting", "name", name)
 }
 
 // handleProxiedMessage proxies unhandled messages to the appropriate worker.
@@ -51,7 +51,7 @@ func (s *Session) handleProxiedMessage(eventType cartaDefinitions.EventType, req
 		workerName = "shared-worker"
 	}
 
-	log.Printf("Proxying message for event type %v from client to %s", eventType, workerName)
+	slog.Debug("Proxying message from client to worker", "eventType", eventType, "workerName", workerName)
 
 	if targetWorker == nil {
 		return fmt.Errorf("no worker available to handle message")
@@ -69,7 +69,7 @@ func (s *Session) handleStatusMessage(_ cartaDefinitions.EventType, _ uint32, _ 
 	if err != nil {
 		return fmt.Errorf("error getting worker status: %v", err)
 	} else {
-		log.Printf("Worker status: Alive: %v, Reachable: %v", status.Alive, status.IsReachable)
+		slog.Info("Worker status", "alive", status.Alive, "reachable", status.IsReachable)
 	}
 	return nil
 }
