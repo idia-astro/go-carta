@@ -4,7 +4,7 @@ package oidc
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -29,7 +29,8 @@ func New(cfg config.OIDCConfig) *OIDCAuthenticator {
 
 	provider, err := gooidc.NewProvider(ctx, cfg.IssuerURL)
 	if err != nil {
-		log.Panicf("OIDC: failed to create provider for %q: %v", cfg.IssuerURL, err)
+		slog.Error("OIDC: failed to create provider", "issuerURL", cfg.IssuerURL, "error", err)
+		panic(err)
 	}
 
 	oidcCfg := &gooidc.Config{
@@ -83,7 +84,7 @@ func (o *OIDCAuthenticator) AuthenticateHTTP(w http.ResponseWriter, r *http.Requ
 		if user, err := o.verifySessionCookie(ctx, c.Value); err == nil {
 			return user, nil
 		} else {
-			log.Printf("OIDC: invalid session cookie: %v", err)
+			slog.Debug("OIDC: invalid session cookie", "error", err)
 		}
 	}
 
@@ -94,7 +95,7 @@ func (o *OIDCAuthenticator) AuthenticateHTTP(w http.ResponseWriter, r *http.Requ
 		if user, err := o.verifyRawToken(ctx, raw); err == nil {
 			return user, nil
 		} else {
-			log.Printf("OIDC: bearer token verification failed: %v", err)
+			slog.Debug("OIDC: bearer token verification failed", "error", err)
 		}
 	}
 
@@ -135,14 +136,14 @@ func (o *OIDCAuthenticator) CallbackHandler(w http.ResponseWriter, r *http.Reque
 
 	oauth2Token, err := o.oauth2.Exchange(ctx, code)
 	if err != nil {
-		log.Printf("OIDC: code exchange failed: %v", err)
+		slog.Error("OIDC: code exchange failed", "error", err)
 		http.Error(w, "Code exchange failed", http.StatusUnauthorized)
 		return
 	}
 
 	rawIDToken, ok := oauth2Token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
-		log.Printf("OIDC: no id_token in token response")
+		slog.Error("OIDC: no id_token in token response")
 		http.Error(w, "No id_token in token response", http.StatusUnauthorized)
 		return
 	}
@@ -150,7 +151,7 @@ func (o *OIDCAuthenticator) CallbackHandler(w http.ResponseWriter, r *http.Reque
 	// Verify and extract user (mainly for logging / sanity)
 	user, err := o.verifyRawToken(ctx, rawIDToken)
 	if err != nil {
-		log.Printf("OIDC: id_token verification failed: %v", err)
+		slog.Error("OIDC: id_token verification failed", "error", err)
 		http.Error(w, "Invalid id_token", http.StatusUnauthorized)
 		return
 	}
@@ -169,7 +170,7 @@ func (o *OIDCAuthenticator) CallbackHandler(w http.ResponseWriter, r *http.Reque
 		Expires:  expiry,
 	})
 
-	log.Printf("OIDC: login successful for user %s", user.Username)
+	slog.Info("OIDC: login successful", "username", user.Username)
 
 	http.Redirect(w, r, "/", http.StatusFound)
 }

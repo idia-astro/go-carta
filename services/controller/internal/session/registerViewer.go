@@ -3,7 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
 
@@ -25,7 +25,7 @@ func (s *Session) handleRegisterViewerMessage(_ cartaDefinitions.EventType, requ
 	}
 	s.Info = info
 
-	log.Printf("Worker %s started for session %v and is available at %s:%d", info.WorkerId, payload.SessionId, info.Address, info.Port)
+	slog.Info("Worker started for session", "workerId", info.WorkerId, "sessionId", payload.SessionId, "address", info.Address, "port", info.Port)
 	addr := fmt.Sprintf("ws://%s:%d", info.Address, info.Port)
 	wctx := s.Context
 	if wctx == nil {
