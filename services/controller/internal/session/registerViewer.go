@@ -1,9 +1,9 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"log"
-	"context"
 
 	"github.com/gorilla/websocket"
 
