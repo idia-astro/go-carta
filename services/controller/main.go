@@ -19,6 +19,8 @@ import (
 	"github.com/idia-astro/go-carta/services/controller/internal/auth"
 	authoidc "github.com/idia-astro/go-carta/services/controller/internal/auth/oidc"
 	pamwrap "github.com/idia-astro/go-carta/services/controller/internal/auth/pamwrap"
+
+	"github.com/idia-astro/go-carta/services/controller/internal/database"
 )
 
 var (
@@ -155,6 +157,16 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 	})
 }
 
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		w.Header().Set("Surrogate-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 	log.Printf("Setting up PAM login handler")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -230,6 +242,8 @@ func main() {
 	flag.StringVar(&cfg.OIDC.ClientSecret, "oidcClientSecret", "", "OIDC client secret")
 	flag.StringVar(&cfg.OIDC.RedirectURL, "oidcRedirectURL", "", "OIDC redirect/callback URL")
 
+	flag.StringVar(&cfg.DBConnectionString, "dbConnectionString", "", "Database connection string")
+
 	flag.Parse()
 
 	runtimeSpawnerAddress = cfg.SpawnerAddress
@@ -269,6 +283,7 @@ func main() {
 	default:
 		log.Fatalf("Unknown authMode %q", cfg.AuthMode)
 	}
+
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
 		dirname, err := os.UserHomeDir()
@@ -278,6 +293,26 @@ func main() {
 		if err := flag.Set("baseFolder", dirname); err != nil {
 			log.Fatalf("Failed to set --baseFolder: %v\n", err)
 		}
+	}
+
+	if (cfg.DBConnectionString != "") {
+		log.Printf("Database connection string provided: %s", cfg.DBConnectionString)
+		db := database.DbConfig{
+			ConnString: cfg.DBConnectionString,
+		}
+		db.InitDb()
+		http.Handle("/api/database", noCache(withAuth(authenticator, http.HandlerFunc(db.HttpHandler))))
+	} else {
+		log.Printf("Defaulting to backend's filesystem-based state-saving")
+	}
+
+	// Expose auth endpoints as needed
+	if oidcAuth != nil && (cfg.AuthMode == config.AuthOIDC || cfg.AuthMode == config.AuthBoth) {
+		http.Handle("/oidc/login", http.HandlerFunc(oidcAuth.LoginHandler))
+		http.Handle("/oidc/callback", http.HandlerFunc(oidcAuth.CallbackHandler))
+	}
+	if pamAuth != nil && (cfg.AuthMode == config.AuthPAM || cfg.AuthMode == config.AuthBoth) {
+		http.Handle("/pam-login", pamLoginHandler(pamAuth))
 	}
 
 	// If a frontend directory is provided, serve carta_frontend from there
@@ -290,11 +325,6 @@ func main() {
 		log.Printf("Serving carta_frontend from %s\n", cfg.FrontendDir)
 		fs := http.FileServer(http.Dir(cfg.FrontendDir))
 
-		if oidcAuth != nil && (cfg.AuthMode == config.AuthOIDC || cfg.AuthMode == config.AuthBoth) {
-			http.Handle("/oidc/login", http.HandlerFunc(oidcAuth.LoginHandler))
-			http.Handle("/oidc/callback", http.HandlerFunc(oidcAuth.CallbackHandler))
-		}
-
 		// Root handler behaves like carta_backend:
 		//  - /           -> index.html
 		//  - /static/... -> real files
@@ -304,11 +334,6 @@ func main() {
 			root: cfg.FrontendDir,
 			fs:   fs,
 		}))
-
-		// Expose the PAM login page only when PAM is enabled.
-		if pamAuth != nil && (cfg.AuthMode == config.AuthPAM || cfg.AuthMode == config.AuthBoth) {
-			http.Handle("/pam-login", pamLoginHandler(pamAuth))
-		}
 	} else {
 		log.Print("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}

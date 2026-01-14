@@ -32,4 +32,5 @@ type Config struct {
     AuthMode       AuthMode
     OIDC           OIDCConfig
     PAM            PAMConfig
+    DBConnectionString string
 }
