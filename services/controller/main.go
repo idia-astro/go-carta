@@ -301,7 +301,11 @@ func main() {
 			ConnString: cfg.DBConnectionString,
 		}
 		db.InitDb()
-		http.Handle("/api/database", noCache(withAuth(authenticator, http.HandlerFunc(db.HttpHandler))))
+		http.Handle(
+			"/api/database/",
+			noCache(
+				withAuth(authenticator,
+					http.StripPrefix("/api/database", http.Handler(db.Router())))))
 	} else {
 		log.Printf("Defaulting to backend's filesystem-based state-saving")
 	}
