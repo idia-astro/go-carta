@@ -3,12 +3,18 @@ package database
 import (
 	"log"
 	"net/http"
+    "fmt"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
     "github.com/santhosh-tekuri/jsonschema/v6"
     "embed"
+    "encoding/json"
+
+    "github.com/idia-astro/go-carta/services/controller/internal/session"
+    "github.com/idia-astro/go-carta/services/controller/internal/auth"
+
 )
 
 // Avoid needing to ship schema files separately
@@ -33,10 +39,10 @@ func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error)
     if err != nil {
 	    log.Fatal(err)
     }
-    if err := c.AddResource(path, inst); err != nil {
+    if err := c.AddResource("embed://"+path, inst); err != nil {
         return nil, err
     }
-    return c.Compile(path)
+    return c.Compile("embed://"+path)
 }
 
 type DbConfig struct {
@@ -118,16 +124,44 @@ func (h *DbConfig) InitDb() {
     }
 }
 
+func getUsername(r *http.Request) string {
+    ctx := r.Context()
+    user, ok := ctx.Value(session.UserContextKey).(*auth.User)
+    if !ok {
+        log.Printf("No username found in request context")
+        return ""
+    }
+    return user.Username
+}
+
 func notImplemented(w http.ResponseWriter, r *http.Request) {
     log.Printf("DB API called: %s %s (not implemented)", r.Method, r.URL.Path)
     w.WriteHeader(http.StatusNotImplemented)
     _, _ = w.Write([]byte("Not implemented"))
 }
 
+func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
+    //log.Printf("get username: %s", getUsername(r))
+    empty := map[string]any{}
+    empty["version"] = 2
+    err := h.PrefSchema.Validate(empty)
+    if err != nil {
+        http.Error(w, fmt.Sprintf("validation failed: %v", err), http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+
+    enc := json.NewEncoder(w)
+    enc.Encode(empty)
+}
+
+
 func (h *DbConfig) Router() http.Handler {
     mux := http.NewServeMux()
 
-    mux.Handle("GET /preferences", http.HandlerFunc(notImplemented))
+    mux.Handle("GET /preferences", http.HandlerFunc(h.handleGetPreferences))
     mux.Handle("PUT /preferences", http.HandlerFunc(notImplemented))
     mux.Handle("DELETE /preferences", http.HandlerFunc(notImplemented))
 
