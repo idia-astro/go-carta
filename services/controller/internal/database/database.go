@@ -23,13 +23,19 @@ func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error)
     if err != nil {
         return nil, err
     }
-    defer f.Close()
+    defer func () {
+        if err := f.Close(); err != nil {
+            log.Printf("error closing file %s: %v", path, err)
+        }
+    }()
 
     inst, err := jsonschema.UnmarshalJSON(f)
     if err != nil {
 	    log.Fatal(err)
     }
-    c.AddResource(path, inst)
+    if err := c.AddResource(path, inst); err != nil {
+        return nil, err
+    }
     return c.Compile(path)
 }
 
@@ -44,7 +50,7 @@ type DbConfig struct {
     SnippetSchema  *jsonschema.Schema
 }
 
-func (h DbConfig) EnsureTables() error{
+func (h *DbConfig) EnsureTables() error{
 	schema := `
     CREATE TABLE IF NOT EXISTS preferences (
         username TEXT PRIMARY KEY,
@@ -79,7 +85,7 @@ func (h DbConfig) EnsureTables() error{
     return nil
 }
 
-func (h DbConfig) InitDb() {
+func (h *DbConfig) InitDb() {
 	// Initialize DB connection
 	db, err := sqlx.Connect("postgres", h.ConnString)
 	if err != nil {
@@ -118,7 +124,7 @@ func notImplemented(w http.ResponseWriter, r *http.Request) {
     _, _ = w.Write([]byte("Not implemented"))
 }
 
-func (h DbConfig) Router() http.Handler {
+func (h *DbConfig) Router() http.Handler {
     mux := http.NewServeMux()
 
     mux.Handle("GET /preferences", http.HandlerFunc(notImplemented))
@@ -148,7 +154,7 @@ func (h DbConfig) Router() http.Handler {
 
 
 
-func (h DbConfig) HttpHandler(w http.ResponseWriter, r *http.Request) {
+func (h *DbConfig) HttpHandler(w http.ResponseWriter, r *http.Request) {
     log.Printf("Received request for database handler: %s %s", r.Method, r.URL.Path)
 
     w.Header().Set("Content-Type", "text/plain")
