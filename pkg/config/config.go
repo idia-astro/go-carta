@@ -107,8 +107,14 @@ func init() {
 }
 
 // Load loads shared configuration using Viper with defaults
-func Load(overrideStr string) *Config {
+func Load(configPath string, overrideStr string) *Config {
 	setDefaults(viper.GetViper())
+
+	// If a custom config path is provided, use it
+	if configPath != "" {
+		viper.SetConfigFile(configPath)
+	}
+
 	err := viper.ReadInConfig()
 	if err != nil {
 		// Ignore file not found errors (config is optional)
