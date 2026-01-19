@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,9 +12,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
+	"github.com/idia-astro/go-carta/pkg/config"
 	helpers "github.com/idia-astro/go-carta/pkg/shared"
-	"github.com/idia-astro/go-carta/services/controller/internal/config"
 	"github.com/idia-astro/go-carta/services/controller/internal/session"
 
 	"github.com/idia-astro/go-carta/services/controller/internal/auth"
@@ -215,36 +216,49 @@ func main() {
 	id := uuid.New()
 	slog.Info("Starting controller", "uuid", id.String())
 
-	cfg := config.Config{}
-	flag.IntVar(&cfg.Port, "port", 8081, "TCP server port")
-	flag.StringVar(&cfg.Hostname, "hostname", "", "Hostname to listen on")
-	flag.StringVar(&cfg.SpawnerAddress, "spawnerAddress", "http://localhost:8080", "Address of the process spawner")
-	flag.StringVar(&cfg.BaseFolder, "baseFolder", "", "Base folder for data")
-	flag.StringVar(&cfg.FrontendDir, "frontendDir", "", "Directory with carta_frontend")
+	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
+	pflag.Int("port", 8081, "TCP server port")
+	pflag.String("hostname", "", "Hostname to listen on")
+	pflag.String("spawner-address", "http://localhost:8080", "Address of the process spawner")
+	pflag.String("base-folder", "", "Base folder for data")
+	pflag.String("frontend-dir", "", "Directory with carta_frontend")
+	pflag.String("auth-mode", "none", "Authentication mode: none|pam|oidc|both")
 
-	flag.StringVar((*string)(&cfg.AuthMode), "authMode", "none", "Authentication mode: none|pam|oidc|both")
+	pflag.Parse()
 
-	flag.StringVar(&cfg.PAM.ServiceName, "pamService", "carta", "PAM service name (for pam authMode)")
+	// Bind pflags to their corresponding Viper config keys
+	bindFlags := map[string]string{
+		"log_level":       "log_level",
+		"port":            "controller.port",
+		"hostname":        "controller.hostname",
+		"spawner-address": "controller.spawner_address",
+		"base-folder":     "controller.base_folder",
+		"frontend-dir":    "controller.frontend_dir",
+		"auth-mode":       "controller.auth_mode",
+	}
 
-	flag.StringVar(&cfg.OIDC.IssuerURL, "oidcIssuer", "", "OIDC issuer URL (e.g. https://keycloak.example.com/realms/xyz)")
-	flag.StringVar(&cfg.OIDC.ClientID, "oidcClientID", "", "OIDC client ID")
-	flag.StringVar(&cfg.OIDC.ClientSecret, "oidcClientSecret", "", "OIDC client secret")
-	flag.StringVar(&cfg.OIDC.RedirectURL, "oidcRedirectURL", "", "OIDC redirect/callback URL")
+	for flagName, viperKey := range bindFlags {
+		if err := viper.BindPFlag(viperKey, pflag.Lookup(flagName)); err != nil {
+			slog.Error("Failed to bind flag", "flag", flagName, "error", err)
+			os.Exit(1)
+		}
+	}
 
-	flag.Parse()
+	// Load config - Viper will merge defaults, config file, env vars, and flags
+	cfg := config.Load()
 
-	runtimeSpawnerAddress = cfg.SpawnerAddress
-	runtimeBaseFolder = cfg.BaseFolder
+	runtimeSpawnerAddress = cfg.Controller.SpawnerAddress
+	runtimeBaseFolder = cfg.Controller.BaseFolder
 
 	var authenticator auth.Authenticator
 
-	slog.Debug("Configuring auth", "authMode", cfg.AuthMode)
+	slog.Debug("Configuring auth", "authMode", cfg.Controller.AuthMode)
 
-	switch cfg.AuthMode {
+	switch cfg.Controller.AuthMode {
 	case config.AuthNone:
 		authenticator = auth.NoopAuthenticator{}
 	case config.AuthPAM:
-		p, err := pamwrap.New(cfg.PAM)
+		p, err := pamwrap.New(cfg.Controller.PAM)
 		if err != nil {
 			slog.Error("PAM is not available on this platform", "error", err)
 			os.Exit(1)
@@ -253,12 +267,12 @@ func main() {
 		authenticator = p
 
 	case config.AuthOIDC:
-		o := authoidc.New(cfg.OIDC)
+		o := authoidc.New(cfg.Controller.OIDC)
 		oidcAuth = o
 		authenticator = o
 
 	case config.AuthBoth:
-		p, err := pamwrap.New(cfg.PAM)
+		p, err := pamwrap.New(cfg.Controller.PAM)
 		if err != nil {
 			slog.Error("Auth mode 'both' requires PAM, but PAM is not available on this platform", "error", err)
 			os.Exit(1)
@@ -266,37 +280,35 @@ func main() {
 		pamAuth = p
 		authenticator = auth.Multi(
 			p,
-			authoidc.New(cfg.OIDC),
+			authoidc.New(cfg.Controller.OIDC),
 		)
 
 	default:
-		slog.Error("Unknown config option", "authMod", cfg.AuthMode)
+		slog.Error("Unknown config option", "authMod", cfg.Controller.AuthMode)
 		os.Exit(1)
 	}
 	// Default baseFolder to $HOME if unset
-	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
+	if len(strings.TrimSpace(cfg.Controller.BaseFolder)) == 0 {
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
 		}
-		if err := flag.Set("baseFolder", dirname); err != nil {
-			slog.Error("Failed to set baseFolder", "error", err, "dirname", dirname)
-			os.Exit(1)
-		}
+		cfg.Controller.BaseFolder = dirname
+		slog.Debug("Using default base folder", "dirname", dirname)
 	}
 
 	// If a frontend directory is provided, serve carta_frontend from there
-	if cfg.FrontendDir != "" {
-		info, err := os.Stat(cfg.FrontendDir)
+	if cfg.Controller.FrontendDir != "" {
+		info, err := os.Stat(cfg.Controller.FrontendDir)
 		if err != nil || !info.IsDir() {
-			slog.Error("Failed to set frontendDir", "error", err, "dirname", cfg.FrontendDir)
+			slog.Error("Failed to set frontendDir", "error", err, "dirname", cfg.Controller.FrontendDir)
 			os.Exit(1)
 		}
 
-		slog.Info("Serving carta_frontend", "dirname", cfg.FrontendDir)
-		fs := http.FileServer(http.Dir(cfg.FrontendDir))
+		slog.Info("Serving carta_frontend", "dirname", cfg.Controller.FrontendDir)
+		fs := http.FileServer(http.Dir(cfg.Controller.FrontendDir))
 
-		if oidcAuth != nil && (cfg.AuthMode == config.AuthOIDC || cfg.AuthMode == config.AuthBoth) {
+		if oidcAuth != nil && (cfg.Controller.AuthMode == config.AuthOIDC || cfg.Controller.AuthMode == config.AuthBoth) {
 			http.Handle("/oidc/login", http.HandlerFunc(oidcAuth.LoginHandler))
 			http.Handle("/oidc/callback", http.HandlerFunc(oidcAuth.CallbackHandler))
 		}
@@ -307,19 +319,19 @@ func main() {
 		//  - /whatever   -> index.html (for SPA routes)
 		// Wrap root with the currently-selected authenticator (PAM, OIDC, both, or none).
 		http.Handle("/", withAuth(authenticator, spaHandler{
-			root: cfg.FrontendDir,
+			root: cfg.Controller.FrontendDir,
 			fs:   fs,
 		}))
 
 		// Expose the PAM login page only when PAM is enabled.
-		if pamAuth != nil && (cfg.AuthMode == config.AuthPAM || cfg.AuthMode == config.AuthBoth) {
+		if pamAuth != nil && (cfg.Controller.AuthMode == config.AuthPAM || cfg.Controller.AuthMode == config.AuthBoth) {
 			http.Handle("/pam-login", pamLoginHandler(pamAuth))
 		}
 	} else {
 		slog.Info("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}
 
-	addr := fmt.Sprintf("%s:%d", cfg.Hostname, cfg.Port)
+	addr := fmt.Sprintf("%s:%d", cfg.Controller.Hostname, cfg.Controller.Port)
 
 	slog.Info("Server listening", "addr", addr)
 	if err := http.ListenAndServe(addr, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {

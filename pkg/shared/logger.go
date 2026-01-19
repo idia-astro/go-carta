@@ -15,7 +15,7 @@ func NewLogger(serviceName, logLevel string) *slog.Logger {
 		return nil
 	}
 
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})
 

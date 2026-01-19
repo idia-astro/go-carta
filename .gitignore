@@ -12,3 +12,7 @@
 /controller
 /spawner
 /worker
+
+# Configuration files
+/config.toml
+/config.json
