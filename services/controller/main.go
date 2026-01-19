@@ -21,6 +21,8 @@ import (
 	pamwrap "github.com/idia-astro/go-carta/services/controller/internal/auth/pamwrap"
 
 	"github.com/idia-astro/go-carta/services/controller/internal/database"
+
+	"encoding/json"
 )
 
 var (
@@ -222,6 +224,7 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 
 var oidcAuth *authoidc.OIDCAuthenticator
 
+
 func main() {
 	id := uuid.New()
 	log.Printf("Starting controller with UUID: %s\n", id.String())
@@ -341,6 +344,23 @@ func main() {
 	} else {
 		log.Print("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}
+
+	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		cfg := map[string]string{
+			"dashboardAddress":     "/dashboard",
+			"apiAddress":           "/api",
+			"tokenRefreshAddress":  "/api/auth/refresh",
+			"logoutAddress":        "/api/auth/logout",
+			"authPath":             "/api/auth/refresh",
+		}
+
+		if err := json.NewEncoder(w).Encode(cfg); err != nil {
+			log.Printf("Error encoding config: %v", err)
+		}
+	})
 
 	addr := fmt.Sprintf("%s:%d", cfg.Hostname, cfg.Port)
 	log.Printf("Listening on %s\n", addr)

@@ -24,6 +24,11 @@ import (
 //go:embed schemas/workspace_schema_1.json
 var schemaFiles embed.FS
 
+const PREFERENCE_SCHEMA_VERSION = 2;
+//const LAYOUT_SCHEMA_VERSION = 2;
+//const SNIPPET_SCHEMA_VERSION = 1;
+//const WORKSPACE_SCHEMA_VERSION = 0;
+
 func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error) {
     f, err := schemaFiles.Open(path)
     if err != nil {
@@ -140,8 +145,24 @@ func notImplemented(w http.ResponseWriter, r *http.Request) {
     _, _ = w.Write([]byte("Not implemented"))
 }
 
+func writeJSONResponse(w http.ResponseWriter, status int, message string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+
+    resp := map[string]any{
+        "status_code": status,
+        "message":     message,
+    }
+
+    if err := json.NewEncoder(w).Encode(resp); err != nil {
+        log.Printf("Error encoding JSON response: %v", err)
+    }
+}
+
+
 func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
-    //log.Printf("get username: %s", getUsername(r))
+    log.Printf("DB API called: %s %s", r.Method, r.URL.Path)
+
     empty := map[string]any{}
     empty["version"] = 2
     err := h.PrefSchema.Validate(empty)
@@ -152,17 +173,60 @@ func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusOK)
-
-    enc := json.NewEncoder(w)
-    enc.Encode(empty)
+    if err := json.NewEncoder(w).Encode(map[string]any{
+        "success": true,
+        "preferences": empty,
+    }); err != nil {
+        log.Printf("Error encoding JSON response: %v", err)
+    }
 }
 
+func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) {
+    log.Printf("DB API called: %s %s", r.Method, r.URL.Path)
+
+    user := getUsername(r)
+    if user == "" {
+        // No username means an error ... rather than unauthorized as `withAuth` should have caught this
+        http.Error(w, "Username not found, but passed authorization", http.StatusInternalServerError)
+    }
+
+    // Decode JSON body
+    var prefs map[string]any
+    dec := json.NewDecoder(r.Body)
+    if err := dec.Decode(&prefs); err != nil {
+        writeJSONResponse(w, http.StatusBadRequest, fmt.Sprintf("Failed to decode JSON body: %v", err))
+        return
+    }
+
+    // Validate against schema
+    prefs["version"] = PREFERENCE_SCHEMA_VERSION
+    if err := h.PrefSchema.Validate(prefs); err != nil {
+        writeJSONResponse(w, http.StatusBadRequest, fmt.Sprintf("Preferences validation failed: %v", err))
+        return
+    }
+
+    // Persist to DB
+    _, err := h.db.ExecContext(r.Context(),
+        `INSERT INTO preferences (username, content)
+        VALUES ($1, $2)
+        ON CONFLICT (username)
+        DO UPDATE SET content = preferences.content || EXCLUDED.content`,
+        user, prefs,
+    )
+    if err != nil {
+        writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to store preferences: %v", err))
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    writeJSONResponse(w, http.StatusOK, "Preferences set successfully")
+}
 
 func (h *DbConfig) Router() http.Handler {
     mux := http.NewServeMux()
 
     mux.Handle("GET /preferences", http.HandlerFunc(h.handleGetPreferences))
-    mux.Handle("PUT /preferences", http.HandlerFunc(notImplemented))
+    mux.Handle("PUT /preferences", http.HandlerFunc(h.handleSetPreferences))
     mux.Handle("DELETE /preferences", http.HandlerFunc(notImplemented))
 
     mux.Handle("GET /layouts", http.HandlerFunc(notImplemented))
