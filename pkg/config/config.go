@@ -107,7 +107,7 @@ func init() {
 }
 
 // Load loads shared configuration using Viper with defaults
-func Load() *Config {
+func Load(overrideStr string) *Config {
 	setDefaults(viper.GetViper())
 	err := viper.ReadInConfig()
 	if err != nil {
@@ -126,5 +126,29 @@ func Load() *Config {
 	if err := viper.Unmarshal(&cfg); err != nil {
 		panic(fmt.Errorf("unable to unmarshal config: %w", err))
 	}
+
+	// Process override flag if provided (after loading config to ensure highest precedence)
+	if overrideStr != "" {
+		// Split into key-value pairs
+		pairs := strings.Split(overrideStr, ",")
+		for _, pair := range pairs {
+			// Split into key and value
+			parts := strings.SplitN(pair, ":", 2)
+			if len(parts) != 2 {
+				slog.Error("Invalid override format", "pair", pair, "expected", "key:value")
+				os.Exit(1)
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			viper.Set(key, value)
+			slog.Debug("Config override applied", "key", key, "value", value)
+		}
+		// Reload config struct to pick up overrides
+		if err := viper.Unmarshal(cfg); err != nil {
+			slog.Error("Failed to apply overrides to config", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	return &cfg
 }

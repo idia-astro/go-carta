@@ -223,6 +223,7 @@ func main() {
 	pflag.String("base-folder", "", "Base folder for data")
 	pflag.String("frontend-dir", "", "Directory with carta_frontend")
 	pflag.String("auth-mode", "none", "Authentication mode: none|pam|oidc|both")
+	pflag.String("override", "", "Override simple config values (string, int, bool) as comma-separated key:value pairs (e.g., controller.port:9000,log_level:debug)")
 
 	pflag.Parse()
 
@@ -244,8 +245,7 @@ func main() {
 		}
 	}
 
-	// Load config - Viper will merge defaults, config file, env vars, and flags
-	cfg := config.Load()
+	cfg := config.Load(pflag.Lookup("override").Value.String())
 
 	runtimeSpawnerAddress = cfg.Controller.SpawnerAddress
 	runtimeBaseFolder = cfg.Controller.BaseFolder
