@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 
 	"github.com/idia-astro/go-carta/pkg/config"
 	helpers "github.com/idia-astro/go-carta/pkg/shared"
@@ -21,7 +20,7 @@ import (
 
 	"github.com/idia-astro/go-carta/services/controller/internal/auth"
 	authoidc "github.com/idia-astro/go-carta/services/controller/internal/auth/oidc"
-	pamwrap "github.com/idia-astro/go-carta/services/controller/internal/auth/pamwrap"
+	"github.com/idia-astro/go-carta/services/controller/internal/auth/pamwrap"
 )
 
 var (
@@ -228,8 +227,7 @@ func main() {
 
 	pflag.Parse()
 
-	// Bind pflags to their corresponding Viper config keys
-	bindFlags := map[string]string{
+	config.BindFlags(map[string]string{
 		"log_level":       "log_level",
 		"port":            "controller.port",
 		"hostname":        "controller.hostname",
@@ -237,14 +235,7 @@ func main() {
 		"base-folder":     "controller.base_folder",
 		"frontend-dir":    "controller.frontend_dir",
 		"auth-mode":       "controller.auth_mode",
-	}
-
-	for flagName, viperKey := range bindFlags {
-		if err := viper.BindPFlag(viperKey, pflag.Lookup(flagName)); err != nil {
-			slog.Error("Failed to bind flag", "flag", flagName, "error", err)
-			os.Exit(1)
-		}
-	}
+	})
 
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 

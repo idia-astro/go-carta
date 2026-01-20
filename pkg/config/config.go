@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -150,11 +151,21 @@ func Load(configPath string, overrideStr string) *Config {
 			slog.Debug("Config override applied", "key", key, "value", value)
 		}
 		// Reload config struct to pick up overrides
-		if err := viper.Unmarshal(cfg); err != nil {
+		if err := viper.Unmarshal(&cfg); err != nil {
 			slog.Error("Failed to apply overrides to config", "error", err)
 			os.Exit(1)
 		}
 	}
 
 	return &cfg
+}
+
+// BindFlags binds pflags to viper keys. bindFlags is a map of pflag names to viper keys.
+func BindFlags(bindFlags map[string]string) {
+	for flagName, viperKey := range bindFlags {
+		if err := viper.BindPFlag(viperKey, pflag.Lookup(flagName)); err != nil {
+			slog.Error("Failed to bind flag", "flag", flagName, "error", err)
+			os.Exit(1)
+		}
+	}
 }

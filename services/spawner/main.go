@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,17 +14,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/spf13/pflag"
 
+	"github.com/idia-astro/go-carta/pkg/config"
 	helpers "github.com/idia-astro/go-carta/pkg/shared"
 	"github.com/idia-astro/go-carta/services/spawner/internal/httpHelpers"
 	"github.com/idia-astro/go-carta/services/spawner/internal/processHelpers"
-)
-
-var (
-	workerProcess = flag.String("workerProcess", "carta_backend", "Path to worker binary")
-	port          = flag.Int("port", 8080, "HTTP server port")
-	hostname      = flag.String("hostname", "", "Hostname to listen on")
-	timeout       = flag.Int("timeout", 5, "Spawn timeout in seconds")
 )
 
 type WorkerInfo struct {
@@ -34,13 +28,31 @@ type WorkerInfo struct {
 }
 
 func main() {
-	flag.Parse()
-
 	logger := helpers.NewLogger("spawner", "debug")
 	slog.SetDefault(logger)
 
 	id := uuid.New()
-	slog.Info("Started spawner", "uuid", id.String())
+	slog.Info("Starting spawner", "uuid", id.String())
+
+	pflag.String("config", "", "Path to config file (default: ./config.toml)")
+	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
+	pflag.Int("port", 8080, "HTTP server port")
+	pflag.String("hostname", "", "Hostname to listen on")
+	pflag.String("workerProcess", "carta_backend", "Path to worker binary")
+	pflag.Int("timeout", 5, "Spawn timeout in seconds")
+	pflag.String("override", "", "Override simple config values (string, int, bool) as comma-separated key:value pairs (e.g., spawner.port:9000,log_level:debug)")
+
+	pflag.Parse()
+
+	config.BindFlags(map[string]string{
+		"log_level":     "log_level",
+		"port":          "spawner.port",
+		"hostname":      "spawner.hostname",
+		"workerProcess": "spawner.worker_process",
+		"timeout":       "spawner.timeout",
+	})
+
+	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -65,7 +77,7 @@ func main() {
 
 		slog.Info("Process started", "baseFolder", reqBody.BaseFolder)
 
-		cmd, port, err := processHelpers.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second, reqBody.BaseFolder)
+		cmd, port, err := processHelpers.SpawnWorker(ctx, cfg.Spawner.WorkerProcess, cfg.Spawner.Timeout, reqBody.BaseFolder)
 		spawnerDuration := time.Since(startTime)
 		if err != nil {
 			slog.Error("Error spawning worker on free port", "error", err)
@@ -94,7 +106,7 @@ func main() {
 		}
 		httpHelpers.WriteTimings(w, httpHelpers.Timings{"spawn-time": spawnerDuration, "check-time": testWorkerDuration})
 
-		workerHostname := *hostname
+		workerHostname := cfg.Spawner.Hostname
 		if workerHostname == "" {
 			workerHostname = "localhost"
 		}
@@ -126,7 +138,7 @@ func main() {
 			return
 		}
 
-		workerHostname := *hostname
+		workerHostname := cfg.Spawner.Hostname
 		if workerHostname == "" {
 			workerHostname = "localhost"
 		}
@@ -185,12 +197,12 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", *hostname, *port),
+		Addr:    fmt.Sprintf("%s:%d", cfg.Spawner.Hostname, cfg.Spawner.Port),
 		Handler: r,
 	}
 	// Run server in background
 	go func() {
-		slog.Info("Starting spawner", "hostname", *hostname, "port", *port)
+		slog.Info("Spawner listening", "hostname", cfg.Spawner.Hostname, "port", cfg.Spawner.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("ListenAndServe error", "error", err)
 			os.Exit(1)
