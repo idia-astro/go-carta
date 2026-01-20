@@ -24,7 +24,7 @@ which protoc-gen-go
 
 homebrew (macOS):
 ```bash
-brew install brew install protoc-gen-go protoc-gen-go-grpc
+brew install protoc-gen-go protoc-gen-go-grpc
 ```
 
 apt-get (ubuntu):
@@ -41,7 +41,7 @@ Tested with:
 The worker service uses cgo to compile some simple functions that utilise cfitsio. Install `libcfitsio-dev` (ubuntu) or `cfitsio` (macOS homebrew).
 
 ## Build
-Ensure the carta-protobuf` submodule is initialised:
+Ensure the `carta-protobuf` submodule is initialised:
 ```shell
 git submodule update --init
 ```
@@ -63,7 +63,6 @@ Compiled services are found in the `build` folder.
 
 ```bash
 # From the project root
-./build/worker --port 8080
-./build/controller --remoteAddress localhost:8080
-./build/spawner --workerProcess build/worker --port 8080
+./build/spawner --worker_process build/worker --port 8080
+./build/controller --spawner_address http://localhost:8080 --port 8081
 ```

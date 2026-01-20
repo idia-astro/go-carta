@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"flag"
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,13 +12,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/spf13/pflag"
 
-	"github.com/CARTAvis/go-carta/services/controller/internal/config"
+	"github.com/CARTAvis/go-carta/pkg/config"
+	helpers "github.com/CARTAvis/go-carta/pkg/shared"
 	"github.com/CARTAvis/go-carta/services/controller/internal/session"
 
 	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
 	authoidc "github.com/CARTAvis/go-carta/services/controller/internal/auth/oidc"
-	pamwrap "github.com/CARTAvis/go-carta/services/controller/internal/auth/pamwrap"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth/pamwrap"
 )
 
 var (
@@ -30,7 +32,7 @@ var (
 var upgrader = websocket.Upgrader{
 	// Ignore Origin header
 	CheckOrigin: func(r *http.Request) bool {
-		log.Printf("Upgrading WebSocket connection from Origin: %s", r.Header.Get("Origin"))
+		slog.Debug("Upgrading WebSocket connection", "origin", r.Header.Get("Origin"))
 		return true
 	},
 }
@@ -42,20 +44,22 @@ type spaHandler struct {
 }
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// We can create a sub-logger for this handler from the default handler
+	logger := slog.With("service", "spaHandler")
 	// If this is a WebSocket upgrade (e.g. ws://localhost:8081), hand it to wsHandler
-	log.Printf("** spaHandler: Received request for %s", r.URL.Path)
+	logger.Debug("Received request", "path", r.URL.Path)
 	if websocket.IsWebSocketUpgrade(r) {
-		log.Printf("** Upgrading to WebSocket for %s", r.URL.Path)
+		logger.Debug("Upgrading to WebSocket", "path", r.URL.Path)
 		wsHandler(w, r)
 		return
 	}
 
-	log.Printf("** spaHandler: Serving HTTP request for %s", r.URL.Path)
+	logger.Debug("Serving HTTP request", "path", r.URL.Path)
 	// Clean and resolve requested path
 	path := r.URL.Path
 	if path == "" || path == "/" {
-		log.Printf("** Serving root path, returning index.html")
-		log.Printf("** Serving root %s", filepath.Join(h.root, "index.html"))
+		logger.Debug("Serving root, returning index.html")
+		logger.Debug("Serving root", "path", filepath.Join(h.root, "index.html"))
 		http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
 		return
 	}
@@ -74,24 +78,18 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("** Handling WebSocket connection from %s", r.RemoteAddr)
+	slog.Debug("Handling WebSocket connection", "remoteAddr", r.RemoteAddr)
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
+		slog.Error("Problem with HTTP upgrade", "error", err)
 		return
 	}
-
-	defer func() {
-		if err := c.Close(); err != nil {
-			log.Printf("Error closing WebSocket: %v", err)
-		}
-	}()
+	defer helpers.CloseOrLog(c)
 
 	user, _ := r.Context().Value(session.UserContextKey).(*auth.User)
 
 	s := session.NewSession(c, runtimeSpawnerAddress, runtimeBaseFolder, user)
-	log.Printf("Created new session for user: %v", user)
-	log.Printf(".   -----   %+v\n", s)
+	slog.Info("Created new session", "user", user)
 
 	// Send messages back to client through websocket
 	s.HandleConnection()
@@ -103,36 +101,36 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	for {
 		messageType, message, err := c.ReadMessage()
 		if err != nil {
-			log.Println("Error reading message:", err)
+			slog.Error("Error reading message", "error", err)
 			break
 		}
 
 		// Ping/pong sequence
 		if messageType == websocket.TextMessage && string(message) == "PING" {
-			log.Printf("Received PING from client, sending PONG\n")
+			slog.Debug("Received PING from client, sending PONG")
 			err := c.WriteMessage(websocket.TextMessage, []byte("PONG"))
 			if err != nil {
-				log.Printf("Failed to send pong message: %v\n", err)
+				slog.Error("Failed to send pong message", "error", err)
 			}
 			continue
 		}
 
 		// Ignore all other non-binary messages
 		if messageType != websocket.BinaryMessage {
-			log.Printf("Ignoring non-binary message: %s\n", message)
+			slog.Warn("Ignoring non-binary message", "type", messageType, "message", message)
 			continue
 		}
 
 		go func() {
 			err := s.HandleMessage(message)
 			if err != nil {
-				log.Printf("Failed to handle message: %v\n", err)
+				slog.Warn("Failed to handle message", "error", err)
 			}
 		}()
 	}
 
 	// defer should shut down the worker afterwards
-	log.Print("Client disconnected")
+	slog.Info("Client disconnected")
 }
 
 func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
@@ -142,10 +140,10 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 			// Expected when we just redirected to /oidc/login
 			if strings.Contains(err.Error(), "no OIDC session") {
 				// optional: log at debug level instead
-				log.Printf("Auth: redirecting to OIDC login")
+				slog.Debug("Redirecting to OIDC login")
 				return
 			}
-			log.Printf("Auth failed: %v", err)
+			slog.Error("Auth failed", "error", err)
 			return
 		}
 
@@ -156,7 +154,7 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 }
 
 func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
-	log.Printf("Setting up PAM login handler")
+	slog.Info("Setting up PAM login handler")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -189,20 +187,20 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 
 			user, err := p.AuthenticateCredentials(r.Context(), username, password)
 			if err != nil {
-				log.Printf("PAM login failed for %q: %v", username, err)
+				slog.Error("PAM login failed", "username", username, "error", err)
 				http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 				return
 			}
 
 			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
-				log.Printf("Failed to set PAM session cookie: %v", err)
+				slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
 				http.Error(w, "Session error", http.StatusInternalServerError)
 				return
 			}
 
 			http.Redirect(w, r, "/", http.StatusFound)
 		default:
-			log.Printf("Unsupported PAM login method: %s", r.Method)
+			slog.Warn("Ignoring unsupported method", "method", r.Method)
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})
@@ -211,86 +209,106 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 var oidcAuth *authoidc.OIDCAuthenticator
 
 func main() {
+	logger := helpers.NewLogger("controller", "info")
+	slog.SetDefault(logger)
+
 	id := uuid.New()
-	log.Printf("Starting controller with UUID: %s\n", id.String())
+	slog.Info("Starting controller", "uuid", id.String())
 
-	cfg := config.Config{}
-	flag.IntVar(&cfg.Port, "port", 8081, "TCP server port")
-	flag.StringVar(&cfg.Hostname, "hostname", "", "Hostname to listen on")
-	flag.StringVar(&cfg.SpawnerAddress, "spawnerAddress", "http://localhost:8080", "Address of the process spawner")
-	flag.StringVar(&cfg.BaseFolder, "baseFolder", "", "Base folder for data")
-	flag.StringVar(&cfg.FrontendDir, "frontendDir", "", "Directory with carta_frontend")
+	pflag.String("config", "", "Path to config file (default: ./config.toml)")
+	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
+	pflag.Int("port", 8081, "TCP server port")
+	pflag.String("hostname", "", "Hostname to listen on")
+	pflag.String("spawner_address", "", "Address of the process spawner")
+	pflag.String("base_folder", "", "Base folder for data")
+	pflag.String("frontend_dir", "", "Directory with carta_frontend")
+	pflag.String("auth_mode", "none", "Authentication mode: none|pam|oidc|both")
+	pflag.String("override", "", "Override simple config values (string, int, bool) as comma-separated key:value pairs (e.g., controller.port:9000,log_level:debug)")
 
-	flag.StringVar((*string)(&cfg.AuthMode), "authMode", "none", "Authentication mode: none|pam|oidc|both")
+	pflag.Parse()
 
-	flag.StringVar(&cfg.PAM.ServiceName, "pamService", "carta", "PAM service name (for pam authMode)")
+	config.BindFlags(map[string]string{
+		"log_level":       "log_level",
+		"port":            "controller.port",
+		"hostname":        "controller.hostname",
+		"spawner_address": "controller.spawner_address",
+		"base_folder":     "controller.base_folder",
+		"frontend_dir":    "controller.frontend_dir",
+		"auth_mode":       "controller.auth_mode",
+	})
 
-	flag.StringVar(&cfg.OIDC.IssuerURL, "oidcIssuer", "", "OIDC issuer URL (e.g. https://keycloak.example.com/realms/xyz)")
-	flag.StringVar(&cfg.OIDC.ClientID, "oidcClientID", "", "OIDC client ID")
-	flag.StringVar(&cfg.OIDC.ClientSecret, "oidcClientSecret", "", "OIDC client secret")
-	flag.StringVar(&cfg.OIDC.RedirectURL, "oidcRedirectURL", "", "OIDC redirect/callback URL")
+	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 
-	flag.Parse()
+	// Update the logger to use the configured log level
+	logger = helpers.NewLogger("controller", cfg.LogLevel)
+	slog.SetDefault(logger)
 
-	runtimeSpawnerAddress = cfg.SpawnerAddress
-	runtimeBaseFolder = cfg.BaseFolder
+	runtimeSpawnerAddress = cfg.Controller.SpawnerAddress
+	if runtimeSpawnerAddress == "" {
+		runtimeSpawnerAddress = fmt.Sprintf("http://%s:%d", cfg.Spawner.Hostname, cfg.Spawner.Port)
+	}
+
+	runtimeBaseFolder = cfg.Controller.BaseFolder
 
 	var authenticator auth.Authenticator
 
-	log.Printf("Auth mode: %s", cfg.AuthMode)
+	slog.Debug("Configuring auth", "authMode", cfg.Controller.AuthMode)
 
-	switch cfg.AuthMode {
+	switch cfg.Controller.AuthMode {
 	case config.AuthNone:
 		authenticator = auth.NoopAuthenticator{}
 	case config.AuthPAM:
-		p, err := pamwrap.New(cfg.PAM)
+		p, err := pamwrap.New(cfg.Controller.PAM)
 		if err != nil {
-			log.Fatalf("PAM is not available on this platform: %v", err)
+			slog.Error("PAM is not available on this platform", "error", err)
+			os.Exit(1)
 		}
 		pamAuth = p
 		authenticator = p
 
 	case config.AuthOIDC:
-		o := authoidc.New(cfg.OIDC)
+		o := authoidc.New(cfg.Controller.OIDC)
 		oidcAuth = o
 		authenticator = o
 
 	case config.AuthBoth:
-		p, err := pamwrap.New(cfg.PAM)
+		p, err := pamwrap.New(cfg.Controller.PAM)
 		if err != nil {
-			log.Fatalf("Auth mode 'both' requires PAM, but PAM is not available on this platform: %v", err)
+			slog.Error("Auth mode 'both' requires PAM, but PAM is not available on this platform", "error", err)
+			os.Exit(1)
 		}
 		pamAuth = p
 		authenticator = auth.Multi(
 			p,
-			authoidc.New(cfg.OIDC),
+			authoidc.New(cfg.Controller.OIDC),
 		)
 
 	default:
-		log.Fatalf("Unknown authMode %q", cfg.AuthMode)
+		slog.Error("Unknown config option", "authMod", cfg.Controller.AuthMode)
+		os.Exit(1)
 	}
 	// Default baseFolder to $HOME if unset
-	if len(strings.TrimSpace(cfg.BaseFolder)) == 0 {
+	if len(strings.TrimSpace(cfg.Controller.BaseFolder)) == 0 {
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			dirname = "/"
 		}
-		if err := flag.Set("baseFolder", dirname); err != nil {
-			log.Fatalf("Failed to set --baseFolder: %v\n", err)
-		}
+		cfg.Controller.BaseFolder = dirname
+		slog.Debug("Using default base folder", "dirname", dirname)
 	}
 
 	// If a frontend directory is provided, serve carta_frontend from there
-	if cfg.FrontendDir != "" {
-		info, err := os.Stat(cfg.FrontendDir)
+	if cfg.Controller.FrontendDir != "" {
+		info, err := os.Stat(cfg.Controller.FrontendDir)
 		if err != nil || !info.IsDir() {
-			log.Fatalf("Invalid --frontendDir %q: %v\n", cfg.FrontendDir, err)
+			slog.Error("Failed to set frontendDir", "error", err, "dirname", cfg.Controller.FrontendDir)
+			os.Exit(1)
 		}
 
-		log.Printf("Serving carta_frontend from %s\n", cfg.FrontendDir)
-		fs := http.FileServer(http.Dir(cfg.FrontendDir))
+		slog.Info("Serving carta_frontend", "dirname", cfg.Controller.FrontendDir)
+		fs := http.FileServer(http.Dir(cfg.Controller.FrontendDir))
 
-		if oidcAuth != nil && (cfg.AuthMode == config.AuthOIDC || cfg.AuthMode == config.AuthBoth) {
+		if oidcAuth != nil && (cfg.Controller.AuthMode == config.AuthOIDC || cfg.Controller.AuthMode == config.AuthBoth) {
 			http.Handle("/oidc/login", http.HandlerFunc(oidcAuth.LoginHandler))
 			http.Handle("/oidc/callback", http.HandlerFunc(oidcAuth.CallbackHandler))
 		}
@@ -301,19 +319,23 @@ func main() {
 		//  - /whatever   -> index.html (for SPA routes)
 		// Wrap root with the currently-selected authenticator (PAM, OIDC, both, or none).
 		http.Handle("/", withAuth(authenticator, spaHandler{
-			root: cfg.FrontendDir,
+			root: cfg.Controller.FrontendDir,
 			fs:   fs,
 		}))
 
 		// Expose the PAM login page only when PAM is enabled.
-		if pamAuth != nil && (cfg.AuthMode == config.AuthPAM || cfg.AuthMode == config.AuthBoth) {
+		if pamAuth != nil && (cfg.Controller.AuthMode == config.AuthPAM || cfg.Controller.AuthMode == config.AuthBoth) {
 			http.Handle("/pam-login", pamLoginHandler(pamAuth))
 		}
 	} else {
-		log.Print("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
+		slog.Info("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}
 
-	addr := fmt.Sprintf("%s:%d", cfg.Hostname, cfg.Port)
-	log.Printf("Listening on %s\n", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	addr := fmt.Sprintf("%s:%d", cfg.Controller.Hostname, cfg.Controller.Port)
+
+	slog.Info("Server listening", "addr", addr)
+	if err := http.ListenAndServe(addr, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("Server error", "error", err)
+		os.Exit(1)
+	}
 }

@@ -1,0 +1,85 @@
+# CARTA Go Configuration Example
+# Copy this file to config.toml and adjust values as needed
+# Configuration can also be set via environment variables with CARTA_ prefix
+# Example: CARTA_CONTROLLER_PORT=8081
+
+# ============================================================================
+# Global Settings
+# ============================================================================
+
+# Environment mode: development, production, etc.
+environment = "development"
+
+# Logging level: debug, info, warn, error
+log_level = "info"
+
+# ============================================================================
+# Controller Configuration
+# ============================================================================
+[controller]
+
+# Authentication mode: "none", "pam", "oidc", or "both"
+# - none: No authentication required
+# - pam: Use PAM (Pluggable Authentication Modules) for system user authentication
+# - oidc: Use OpenID Connect for authentication
+# - both: Allow both PAM and OIDC authentication
+auth_mode = "none"
+
+# Port for the controller HTTP/WebSocket server
+port = 8081
+
+# Hostname to bind to. If this is empty, all interfaces will be used
+hostname = ""
+
+# Directory containing the CARTA frontend static files
+# If empty, the controller will not serve the frontend
+frontend_dir = ""
+
+# Address of the spawner service. If this is empty, the controller will determine the address from the spawner hostname and port
+spawner_address = "http://localhost:8080"
+
+# Base folder for user data access
+# If empty, defaults to $HOME
+base_folder = ""
+
+# ----------------------------------------------------------------------------
+# PAM Authentication Configuration (when auth_mode = "pam" or "both")
+# ----------------------------------------------------------------------------
+[controller.pam]
+
+# PAM service name to use for authentication
+service_name = "carta"
+
+# ----------------------------------------------------------------------------
+# OIDC Authentication Configuration (when auth_mode = "oidc" or "both")
+# ----------------------------------------------------------------------------
+[controller.oidc]
+
+# OIDC issuer URL
+issuer_url = ""
+
+# OIDC client ID registered with your identity provider
+client_id = ""
+
+# OIDC client secret
+client_secret = ""
+
+# OIDC redirect/callback URL
+redirect_url = ""
+
+# ============================================================================
+# Spawner Configuration
+# ============================================================================
+[spawner]
+
+# Path or command to the CARTA backend binary
+worker_process = "carta_backend"
+
+# Timeout duration for spawning worker processes
+timeout = "5s"
+
+# Port for the spawner HTTP server
+port = 8080
+
+# Hostname to bind to. If this is empty, all interfaces will be used
+hostname = ""

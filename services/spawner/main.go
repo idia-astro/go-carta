@@ -3,9 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,16 +14,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/spf13/pflag"
 
+	"github.com/CARTAvis/go-carta/pkg/config"
+	helpers "github.com/CARTAvis/go-carta/pkg/shared"
 	"github.com/CARTAvis/go-carta/services/spawner/internal/httpHelpers"
 	"github.com/CARTAvis/go-carta/services/spawner/internal/processHelpers"
-)
-
-var (
-	workerProcess = flag.String("workerProcess", "carta_backend", "Path to worker binary")
-	port          = flag.Int("port", 8080, "HTTP server port")
-	hostname      = flag.String("hostname", "", "Hostname to listen on")
-	timeout       = flag.Int("timeout", 5, "Spawn timeout in seconds")
 )
 
 type WorkerInfo struct {
@@ -33,10 +28,36 @@ type WorkerInfo struct {
 }
 
 func main() {
-	flag.Parse()
+	logger := helpers.NewLogger("spawner", "info")
+	slog.SetDefault(logger)
 
 	id := uuid.New()
-	log.Printf("Started spawner with UUID: %s\n", id.String())
+	slog.Info("Starting spawner", "uuid", id.String())
+
+	pflag.String("config", "", "Path to config file (default: ./config.toml)")
+	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
+	pflag.Int("port", 8080, "HTTP server port")
+	pflag.String("hostname", "", "Hostname to listen on")
+	pflag.String("worker_process", "carta_backend", "Path to worker binary")
+	pflag.Int("timeout", 5, "Spawn timeout in seconds")
+	pflag.String("override", "", "Override simple config values (string, int, bool) as comma-separated key:value pairs (e.g., spawner.port:9000,log_level:debug)")
+
+	pflag.Parse()
+
+	config.BindFlags(map[string]string{
+		"log_level":      "log_level",
+		"port":           "spawner.port",
+		"hostname":       "spawner.hostname",
+		"worker_process": "spawner.worker_process",
+		"timeout":        "spawner.timeout",
+	})
+
+	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
+
+	// Update the logger to use the configured log level
+	logger = helpers.NewLogger("spawner", cfg.LogLevel)
+	slog.SetDefault(logger)
+
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -54,35 +75,35 @@ func main() {
 			BaseFolder string `json:"baseFolder"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-			log.Printf("Error decoding request body: %v\n", err)
+			slog.Error("Error decoding request body", "error", err)
 			httpHelpers.WriteError(w, http.StatusBadRequest, "Error decoding request body")
 			return
 		}
 
-		log.Printf("Process started with base folder: %s\n", reqBody.BaseFolder)
+		slog.Info("Process started", "baseFolder", reqBody.BaseFolder)
 
-		cmd, port, err := processHelpers.SpawnWorker(ctx, *workerProcess, time.Duration(*timeout)*time.Second, reqBody.BaseFolder)
+		cmd, port, err := processHelpers.SpawnWorker(ctx, cfg.Spawner.WorkerProcess, cfg.Spawner.Timeout, reqBody.BaseFolder)
 		spawnerDuration := time.Since(startTime)
 		if err != nil {
-			log.Printf("Error spawning worker on free port: %v\n", err)
+			slog.Error("Error spawning worker on free port", "error", err)
 			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error spawning worker")
 			return
 		}
-		log.Printf("Started worker on port: %d\n", port)
+		slog.Info("Started worker", "port", port)
 
 		startTime = time.Now()
 		err = processHelpers.TestWorker(ctx, port, 2*time.Second)
 		testWorkerDuration := time.Since(startTime)
 		if err != nil {
-			log.Printf("Error connecting to worker: %v\n", err)
+			slog.Error("Error connecting to worker", "error", err)
 			err := cmd.Process.Kill()
 			if err != nil {
-				log.Printf("Error killing worker: %v\n", err)
+				slog.Error("Error killing worker", "error", err)
 			}
 			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error connecting to worker")
 			return
 		}
-		log.Printf("Connected to worker on port: %d\n", port)
+		slog.Info("Connected to worker", "port", port)
 		workerId := uuid.New()
 		workerMap[workerId.String()] = &WorkerInfo{
 			Process: cmd,
@@ -90,7 +111,7 @@ func main() {
 		}
 		httpHelpers.WriteTimings(w, httpHelpers.Timings{"spawn-time": spawnerDuration, "check-time": testWorkerDuration})
 
-		workerHostname := *hostname
+		workerHostname := cfg.Spawner.Hostname
 		if workerHostname == "" {
 			workerHostname = "localhost"
 		}
@@ -122,7 +143,7 @@ func main() {
 			return
 		}
 
-		workerHostname := *hostname
+		workerHostname := cfg.Spawner.Hostname
 		if workerHostname == "" {
 			workerHostname = "localhost"
 		}
@@ -145,7 +166,7 @@ func main() {
 			err := processHelpers.TestWorker(ctx, info.Port, 1*time.Second)
 			elapsed := time.Since(start)
 			if err != nil {
-				log.Printf("Error connecting to worker: %v\n", err)
+				slog.Error("Error connecting to worker", "error", err)
 				isReachable = false
 			} else {
 				httpHelpers.WriteTimings(w, httpHelpers.Timings{"check-time": elapsed})
@@ -170,7 +191,7 @@ func main() {
 		elapsed := time.Since(start)
 
 		if err != nil {
-			log.Printf("Error stopping worker: %v\n", err)
+			slog.Error("Error stopping worker", "error", err)
 			httpHelpers.WriteError(w, http.StatusInternalServerError, "Error stopping worker")
 			return
 		}
@@ -181,20 +202,21 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", *hostname, *port),
+		Addr:    fmt.Sprintf("%s:%d", cfg.Spawner.Hostname, cfg.Spawner.Port),
 		Handler: r,
 	}
 	// Run server in background
 	go func() {
-		log.Printf("Starting spawner on %s:%d\n", *hostname, *port)
+		slog.Info("Spawner listening", "hostname", cfg.Spawner.Hostname, "port", cfg.Spawner.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("ListenAndServe error: %v", err)
+			slog.Error("ListenAndServe error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	// Wait for interrupt
 	<-ctx.Done()
-	log.Println("Signal received, shutting down...")
+	slog.Info("Signal received, shutting down...")
 
 	for id, w := range workerMap {
 		// If the worker is not running, skip it
@@ -202,7 +224,7 @@ func main() {
 			// First try a graceful shutdown
 			err := w.Process.Process.Signal(syscall.SIGTERM)
 			if err != nil {
-				log.Printf("Error sending SIGTERM to process: %v\n", err)
+				slog.Error("Error sending SIGTERM to process", "error", err)
 				continue
 			}
 
@@ -212,11 +234,11 @@ func main() {
 
 			select {
 			case err := <-done:
-				log.Printf("process exited: %v\n", err)
+				slog.Info("process exited", "error", err)
 			case <-time.After(5 * time.Second):
-				log.Println("timeout, force killing")
+				slog.Info("timeout, force killing")
 				if err := w.Process.Process.Kill(); err != nil {
-					log.Printf("Error force killing process: %v\n", err)
+					slog.Error("Error force killing process", "error", err)
 				}
 				<-done // wait again to reap zombie
 			}
@@ -228,14 +250,14 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("HTTP server Shutdown error: %v", err)
+		slog.Error("HTTP server Shutdown error", "error", err)
 	} else {
-		log.Println("HTTP server shut down gracefully")
+		slog.Info("HTTP server shut down gracefully")
 	}
 	cancel()
 
 	// Wait a moment to ensure all logs are printed before exiting
 	time.Sleep(1 * time.Second)
 
-	log.Println("Spawner exited gracefully")
+	slog.Info("Spawner exited gracefully")
 }

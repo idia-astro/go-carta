@@ -1,13 +1,12 @@
 //go:build linux
-// +build linux
 
 package pamwrap
 
 import (
 	"net/http"
 
+	"github.com/CARTAvis/go-carta/pkg/config"
 	authpam "github.com/CARTAvis/go-carta/services/controller/internal/auth/pam"
-	"github.com/CARTAvis/go-carta/services/controller/internal/config"
 )
 
 func newImpl(cfg config.PAMConfig) (Authenticator, error) {

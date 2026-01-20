@@ -3,7 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -119,8 +119,8 @@ func (s *Session) HandleDisconnect() {
 
 	err := spawnerHelpers.RequestWorkerShutdown(s.Info.WorkerId, s.SpawnerAddress)
 	if err != nil {
-		log.Printf("Error shutting down worker: %v", err)
+		slog.Error("Error shutting down worker", "error", err)
 	}
-	log.Printf("Shut down worker with UUID: %s", s.Info.WorkerId)
+	slog.Info("Shut down worker", "workerId", s.Info.WorkerId)
 
 }
