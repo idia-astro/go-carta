@@ -38,21 +38,26 @@ func main() {
 	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
 	pflag.Int("port", 8080, "HTTP server port")
 	pflag.String("hostname", "", "Hostname to listen on")
-	pflag.String("workerProcess", "carta_backend", "Path to worker binary")
+	pflag.String("worker_process", "carta_backend", "Path to worker binary")
 	pflag.Int("timeout", 5, "Spawn timeout in seconds")
 	pflag.String("override", "", "Override simple config values (string, int, bool) as comma-separated key:value pairs (e.g., spawner.port:9000,log_level:debug)")
 
 	pflag.Parse()
 
 	config.BindFlags(map[string]string{
-		"log_level":     "log_level",
-		"port":          "spawner.port",
-		"hostname":      "spawner.hostname",
-		"workerProcess": "spawner.worker_process",
-		"timeout":       "spawner.timeout",
+		"log_level":      "log_level",
+		"port":           "spawner.port",
+		"hostname":       "spawner.hostname",
+		"worker_process": "spawner.worker_process",
+		"timeout":        "spawner.timeout",
 	})
 
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
+
+	// Update the logger to use the configured log level
+	logger = helpers.NewLogger("controller", cfg.LogLevel)
+	slog.SetDefault(logger)
+
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
