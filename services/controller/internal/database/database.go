@@ -1,9 +1,10 @@
 package database
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
     "fmt"
+    "os"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -36,13 +37,13 @@ func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error)
     }
     defer func () {
         if err := f.Close(); err != nil {
-            log.Printf("error closing file %s: %v", path, err)
+            slog.Error("error closing file %s: %v", path, err)
         }
     }()
 
     inst, err := jsonschema.UnmarshalJSON(f)
     if err != nil {
-	    log.Fatal(err)
+	    slog.Error("UnmarshalJSON error: %v", err)
     }
     if err := c.AddResource("embed://"+path, inst); err != nil {
         return nil, err
@@ -100,32 +101,38 @@ func (h *DbConfig) InitDb() {
 	// Initialize DB connection
 	db, err := sqlx.Connect("postgres", h.ConnString)
 	if err != nil {
-		log.Fatalf("Error connecting to database: %v", err)
+		slog.Error("Error connecting to database: %v", err)
+        os.Exit(-1)
 	}
 	h.db = db
 
 	// Ensure tables exist
 	if err := h.EnsureTables(); err != nil {
-		log.Fatalf("Error ensuring database tables: %v", err)
+		slog.Error("Error ensuring database tables: %v", err)
+        os.Exit(-1)
 	}
 
     // Load JSON schemas
     c := jsonschema.NewCompiler()
     h.PrefSchema, err = loadSchema(c, "schemas/preferences_schema_2.json")
     if err != nil {
-        log.Fatal(err)
+        slog.Error("Error loading preferences schema: %v", err)
+        os.Exit(-1)
     }
     h.LayoutSchema, err = loadSchema(c, "schemas/layout_schema_2.json")
     if err != nil {
-        log.Fatal(err)
+        slog.Error("Error loading layout schema: %v", err)
+        os.Exit(-1)
     }
     h.SnippetSchema, err = loadSchema(c, "schemas/snippet_schema_1.json")
     if err != nil {
-        log.Fatal(err)
+        slog.Error("Error loading snippet schema: %v", err)
+        os.Exit(-1)
     }
     h.WorkspaceSchema, err = loadSchema(c, "schemas/workspace_schema_1.json")
     if err != nil {
-        log.Fatal(err)
+        slog.Error("Error loading workspace schema: %v", err)
+        os.Exit(-1)
     }
 }
 
@@ -133,14 +140,14 @@ func getUsername(r *http.Request) string {
     ctx := r.Context()
     user, ok := ctx.Value(session.UserContextKey).(*auth.User)
     if !ok {
-        log.Printf("No username found in request context")
+        slog.Error("No username found in request context")
         return ""
     }
     return user.Username
 }
 
 func notImplemented(w http.ResponseWriter, r *http.Request) {
-    log.Printf("DB API called: %s %s (not implemented)", r.Method, r.URL.Path)
+    slog.Info("DB API called: %s %s (not implemented)", r.Method, r.URL.Path)
     w.WriteHeader(http.StatusNotImplemented)
     _, _ = w.Write([]byte("Not implemented"))
 }
@@ -155,13 +162,13 @@ func writeJSONResponse(w http.ResponseWriter, status int, message string) {
     }
 
     if err := json.NewEncoder(w).Encode(resp); err != nil {
-        log.Printf("Error encoding JSON response: %v", err)
+        slog.Error("Error encoding JSON response: %v", err)
     }
 }
 
 
 func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
-    log.Printf("DB API called: %s %s", r.Method, r.URL.Path)
+    slog.Debug("DB API called: %s %s", r.Method, r.URL.Path)
 
     empty := map[string]any{}
     empty["version"] = 2
@@ -177,12 +184,12 @@ func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
         "success": true,
         "preferences": empty,
     }); err != nil {
-        log.Printf("Error encoding JSON response: %v", err)
+        slog.Error("Error encoding JSON response: %v", err)
     }
 }
 
 func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) {
-    log.Printf("DB API called: %s %s", r.Method, r.URL.Path)
+    slog.Debug("DB API called: %s %s", r.Method, r.URL.Path)
 
     user := getUsername(r)
     if user == "" {
@@ -253,7 +260,7 @@ func (h *DbConfig) Router() http.Handler {
 
 
 func (h *DbConfig) HttpHandler(w http.ResponseWriter, r *http.Request) {
-    log.Printf("Received request for database handler: %s %s", r.Method, r.URL.Path)
+    slog.Info("Received request for database handler: %s %s", r.Method, r.URL.Path)
 
     w.Header().Set("Content-Type", "text/plain")
     w.WriteHeader(http.StatusOK)

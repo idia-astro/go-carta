@@ -2,7 +2,7 @@ package httpHelpers
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
@@ -19,7 +19,7 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 	w.WriteHeader(status)
 	err := json.NewEncoder(w).Encode(data)
 	if err != nil {
-		log.Printf("Error encoding JSON: %v", err)
+		slog.Error("Error encoding JSON", "error", err)
 		http.Error(w, "Error encoding JSON", http.StatusInternalServerError)
 	}
 }

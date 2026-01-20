@@ -2,7 +2,7 @@ package session
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
 
@@ -23,7 +23,7 @@ func (s *Session) handleOpenFile(_ cartaDefinitions.EventType, requestId uint32,
 		return fmt.Errorf("error starting worker: %v", err)
 	}
 
-	log.Printf("Worker %s started for fileId %v and is available at %s:%d", info.WorkerId, payload.FileId, info.Address, info.Port)
+	slog.Info("Worker started", "workerId", info.WorkerId, "fileId", payload.FileId, "address", info.Address, "port", info.Port)
 	addr := fmt.Sprintf("ws://%s:%d", info.Address, info.Port)
 	workerConn, _, err := websocket.DefaultDialer.DialContext(s.Context, addr, nil)
 	if err != nil {

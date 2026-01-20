@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"regexp"
@@ -49,7 +49,7 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 		args = append(args, "--base", baseFolder)
 	}
 
-	log.Printf("\n\n ***** Spawning worker process: %s %v\n\nn", workerPath, args)
+	slog.Info("Spawning worker process", "workerPath", workerPath, "args", args)
 
 	cmd := exec.CommandContext(ctx, workerPath, args...)
 
@@ -73,7 +73,7 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 	// (carries the detected port).
 	readyCh := make(chan int, 1)
 
-	log.Println("[carta-spawn] ***** Worker process started, waiting for readiness...")
+	slog.Debug("Worker process started, waiting for readiness")
 
 	// TODO: I need to go over this code a bit more
 	// Helper to scan a pipe, forward lines, and watch for readiness.
@@ -82,32 +82,31 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 		for s.Scan() {
 			line := s.Text()
 			// Forward the line to the appropriate writer.
-			//log.Printf("[carta-spawn] %s\n", line)
 			_, err := fmt.Fprintln(w, line)
 			if err != nil {
 				return
 			}
 			// Detect readiness: parse port from log line.
-			log.Printf("[carta-spawn] Scanning line for port info: %s\n\n", line)
+			slog.Debug("Scanning line for port info", "line", line)
 			if p, ok := parsePortFromLine(line); ok {
-				log.Printf("[carta-spawn] +++++++++ Detected worker port from log: %d\n\n", p)
+				slog.Info("Detected worker port from log", "port", p)
 				// Send detected port if not already sent.
 				select {
 				case readyCh <- p:
 				default:
 				}
 			}
-			log.Printf("[carta-spawn] Finished scanning line: %s\n", line)
+			slog.Debug("Finished scanning line", "line", line)
 		}
 	}
 
-	log.Println("[carta-spawn] ***** Starting to watch worker stdout/stderr for readiness...")
+	slog.Debug("Starting to watch worker stdout/stderr for readiness")
 
 	// Start scanning goroutines.
 	go watch(stdoutPipe, os.Stdout)
 	go watch(stderrPipe, os.Stderr)
 
-	log.Println("[carta-spawn] ***** Watching worker output for readiness...")
+	slog.Debug("Watching worker output for readiness")
 
 	// Wait for readiness or timeout; kill the worker on failure.
 	ctxReady, cancel := context.WithTimeout(ctx, timeoutDuration)

@@ -1,12 +1,11 @@
 //go:build !linux
-// +build !linux
 
 package pamwrap
 
 import (
 	"net/http"
 
-	"github.com/idia-astro/go-carta/services/controller/internal/config"
+	"github.com/idia-astro/go-carta/pkg/config"
 )
 
 func newImpl(cfg config.PAMConfig) (Authenticator, error) {

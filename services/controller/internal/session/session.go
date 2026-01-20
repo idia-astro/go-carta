@@ -3,7 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -26,7 +26,7 @@ type Session struct {
 	User           *auth.User
 	Context        context.Context
 	Cancel         context.CancelFunc
-	
+
 	clientSendChan chan []byte
 	// maps incoming file IDs to the internal IDs of the workers
 	fileMap      map[int32]*SessionWorker
@@ -41,15 +41,15 @@ var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.
 }
 
 func NewSession(conn *websocket.Conn, workerAddr string, folder string, user *auth.User) *Session {
-    ctx, cancel := context.WithCancel(context.Background())
-    return &Session{
-        WebSocket:      conn,
-        SpawnerAddress: workerAddr,
-        BaseFolder:     folder,
-        User:           user,
-        Context:        ctx,
-        Cancel:         cancel,
-    }
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Session{
+		WebSocket:      conn,
+		SpawnerAddress: workerAddr,
+		BaseFolder:     folder,
+		User:           user,
+		Context:        ctx,
+		Cancel:         cancel,
+	}
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {
@@ -119,8 +119,8 @@ func (s *Session) HandleDisconnect() {
 
 	err := spawnerHelpers.RequestWorkerShutdown(s.Info.WorkerId, s.SpawnerAddress)
 	if err != nil {
-		log.Printf("Error shutting down worker: %v", err)
+		slog.Error("Error shutting down worker", "error", err)
 	}
-	log.Printf("Shut down worker with UUID: %s", s.Info.WorkerId)
+	slog.Info("Shut down worker", "workerId", s.Info.WorkerId)
 
 }
