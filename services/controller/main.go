@@ -301,7 +301,7 @@ func main() {
 		)
 
 	default:
-		slog.Error("Unknown config option", "authMod", cfg.Controller.AuthMode)
+		slog.Error("Unknown config option", "authMode", cfg.Controller.AuthMode)
 		os.Exit(1)
 	}
 
