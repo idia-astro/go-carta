@@ -209,7 +209,7 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 var oidcAuth *authoidc.OIDCAuthenticator
 
 func main() {
-	logger := helpers.NewLogger("controller", "debug")
+	logger := helpers.NewLogger("controller", "info")
 	slog.SetDefault(logger)
 
 	id := uuid.New()
