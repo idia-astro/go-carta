@@ -364,13 +364,13 @@ func main() {
 		slog.Info("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}
 
-		cfgHandler := func(w http.ResponseWriter, r *http.Request) {
+	cfgHandler := func(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
 		cfg := map[string]string{
-			//"dashboardAddress":     "/dashboard", // no dashboard ... causes redirect
+			"dashboardAddress":     "/dashboard", // no dashboard ... causes redirect
 			"apiAddress":           "/api",
 			"tokenRefreshAddress":  "/api/auth/refresh",
 			"logoutAddress":        "/api/auth/logout",
@@ -382,7 +382,6 @@ func main() {
 		}
 	}
 	http.Handle("/config", http.HandlerFunc(cfgHandler))
-	http.Handle("/config/", http.HandlerFunc(cfgHandler))
 
 	addr := fmt.Sprintf("%s:%d", cfg.Controller.Hostname, cfg.Controller.Port)
 
