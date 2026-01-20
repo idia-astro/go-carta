@@ -126,7 +126,7 @@ func Load(configPath string, overrideStr string) *Config {
 			slog.Error("Failed to read config file", "error", err, "config_file", viper.ConfigFileUsed())
 			os.Exit(1)
 		}
-		slog.Debug("No config file found, using defaults")
+		slog.Info("No config file found, using defaults")
 	} else {
 		slog.Info("Loaded config file", "path", viper.ConfigFileUsed())
 	}
@@ -150,7 +150,6 @@ func Load(configPath string, overrideStr string) *Config {
 			key := strings.TrimSpace(parts[0])
 			value := strings.TrimSpace(parts[1])
 			viper.Set(key, value)
-			slog.Debug("Config override applied", "key", key, "value", value)
 		}
 		// Reload config struct to pick up overrides
 		if err := viper.Unmarshal(&cfg); err != nil {

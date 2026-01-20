@@ -28,7 +28,7 @@ type WorkerInfo struct {
 }
 
 func main() {
-	logger := helpers.NewLogger("spawner", "debug")
+	logger := helpers.NewLogger("spawner", "info")
 	slog.SetDefault(logger)
 
 	id := uuid.New()
