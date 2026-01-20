@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"html/template"
 	"strings"
 
 	"github.com/google/uuid"
@@ -153,57 +154,74 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 	})
 }
 
+var pamLoginTmpl *template.Template
+
 func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
-	slog.Info("Setting up PAM login handler")
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = fmt.Fprint(w, `
-<!DOCTYPE html>
-<html>
-  <head><title>CARTA Login</title></head>
-  <body>
-    <h2>CARTA Login (PAM)</h2>
-    <form method="POST">
-      <label>Username: <input name="username" /></label><br/>
-      <label>Password: <input type="password" name="password" /></label><br/>
-      <button type="submit">Login</button>
-    </form>
-  </body>
-</html>
-`)
-		case http.MethodPost:
-			if err := r.ParseForm(); err != nil {
-				http.Error(w, "Bad form", http.StatusBadRequest)
-				return
-			}
-			username := r.Form.Get("username")
-			password := r.Form.Get("password")
-			if username == "" || password == "" {
-				http.Error(w, "Missing username or password", http.StatusBadRequest)
-				return
-			}
+    slog.Info("Setting up PAM login handler")
 
-			user, err := p.AuthenticateCredentials(r.Context(), username, password)
-			if err != nil {
-				slog.Error("PAM login failed", "username", username, "error", err)
-				http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-				return
-			}
+    type pageData struct {
+        Title   string
+        Heading string
+        Error   string
+    }
 
-			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
-				slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
-				http.Error(w, "Session error", http.StatusInternalServerError)
-				return
-			}
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Handling PAM login request", "method", r.Method)
 
-			http.Redirect(w, r, "/", http.StatusFound)
-		default:
-			slog.Warn("Ignoring unsupported method", "method", r.Method)
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	})
+        switch r.Method {
+
+        case http.MethodGet:
+            w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+            _ = pamLoginTmpl.Execute(w, pageData{
+                Title:   "CARTA Login",
+                Heading: "CARTA Login (PAM)",
+            })
+
+        case http.MethodPost:
+            if err := r.ParseForm(); err != nil {
+                http.Error(w, "Bad form", http.StatusBadRequest)
+                return
+            }
+
+            username := r.Form.Get("username")
+            password := r.Form.Get("password")
+
+            if username == "" || password == "" {
+                w.WriteHeader(http.StatusBadRequest)
+                _ = pamLoginTmpl.Execute(w, pageData{
+                    Title:   "CARTA Login",
+                    Heading: "CARTA Login (PAM)",
+                    Error:   "Missing username or password",
+                })
+                return
+            }
+
+            user, err := p.AuthenticateCredentials(r.Context(), username, password)
+            if err != nil {
+                slog.Error("PAM login failed", "username", username, "error", err)
+                w.WriteHeader(http.StatusUnauthorized)
+                _ = pamLoginTmpl.Execute(w, pageData{
+                    Title:   "CARTA Login",
+                    Heading: "CARTA Login (PAM)",
+                    Error:   "Invalid credentials",
+                })
+                return
+            }
+
+            if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
+                slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
+                http.Error(w, "Session error", http.StatusInternalServerError)
+                return
+            }
+
+            http.Redirect(w, r, "/", http.StatusFound)
+
+        default:
+            slog.Warn("Ignoring unsupported method", "method", r.Method)
+            w.WriteHeader(http.StatusMethodNotAllowed)
+        }
+    })
 }
 
 var oidcAuth *authoidc.OIDCAuthenticator
@@ -242,6 +260,10 @@ func main() {
 	// Update the logger to use the configured log level
 	logger = helpers.NewLogger("controller", cfg.LogLevel)
 	slog.SetDefault(logger)
+
+	pamLoginTmpl = template.Must(
+    template.ParseFiles("services/controller/templates/pam_login.html"),
+	)
 
 	runtimeSpawnerAddress = cfg.Controller.SpawnerAddress
 	if runtimeSpawnerAddress == "" {
