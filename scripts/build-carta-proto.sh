@@ -42,3 +42,4 @@ if [ $? -ne 0 ]; then
 fi
 
 echo -e "Successfully generated Go code from proto files!"
+echo -e "Generated files are in pkg/carta-protobuf/"
