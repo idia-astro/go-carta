@@ -14,15 +14,15 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/spf13/pflag"
 
-	"github.com/idia-astro/go-carta/pkg/config"
-	helpers "github.com/idia-astro/go-carta/pkg/shared"
-	"github.com/idia-astro/go-carta/services/controller/internal/session"
+	"github.com/CARTAvis/go-carta/pkg/config"
+	helpers "github.com/CARTAvis/go-carta/pkg/shared"
+	"github.com/CARTAvis/go-carta/services/controller/internal/session"
 
-	"github.com/idia-astro/go-carta/services/controller/internal/auth"
-	authoidc "github.com/idia-astro/go-carta/services/controller/internal/auth/oidc"
-	pamwrap "github.com/idia-astro/go-carta/services/controller/internal/auth/pamwrap"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
+	authoidc "github.com/CARTAvis/go-carta/services/controller/internal/auth/oidc"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth/pamwrap"
 
-	"github.com/idia-astro/go-carta/services/controller/internal/database"
+	"github.com/CARTAvis/go-carta/services/controller/internal/database"
 
 	"encoding/json"
 )
@@ -234,12 +234,12 @@ func main() {
 	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
 	pflag.Int("port", 8081, "TCP server port")
 	pflag.String("hostname", "", "Hostname to listen on")
-	pflag.String("spawner-address", "http://localhost:8080", "Address of the process spawner")
-	pflag.String("base-folder", "", "Base folder for data")
-	pflag.String("frontend-dir", "", "Directory with carta_frontend")
-	pflag.String("auth-mode", "none", "Authentication mode: none|pam|oidc|both")
+	pflag.String("spawner_address", "", "Address of the process spawner")
+	pflag.String("base_folder", "", "Base folder for data")
+	pflag.String("frontend_dir", "", "Directory with carta_frontend")
+	pflag.String("auth_mode", "none", "Authentication mode: none|pam|oidc|both")
 	pflag.String("override", "", "Override simple config values (string, int, bool) as comma-separated key:value pairs (e.g., controller.port:9000,log_level:debug)")
-	pflag.String("db-conn-string", "", "Database connection string")
+	pflag.String("db_conn_string", "", "Database connection string")
 
 	pflag.Parse()
 
@@ -247,16 +247,24 @@ func main() {
 		"log_level":       "log_level",
 		"port":            "controller.port",
 		"hostname":        "controller.hostname",
-		"spawner-address": "controller.spawner_address",
-		"base-folder":     "controller.base_folder",
-		"frontend-dir":    "controller.frontend_dir",
-		"auth-mode":       "controller.auth_mode",
-		"db-conn-string":  "controller.DBConnectionString",
+		"spawner_address": "controller.spawner_address",
+		"base_folder":     "controller.base_folder",
+		"frontend_dir":    "controller.frontend_dir",
+		"auth_mode":       "controller.auth_mode",
+		"db_conn_string":  "controller.DBConnectionString",
 	})
 
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 
+	// Update the logger to use the configured log level
+	logger = helpers.NewLogger("controller", cfg.LogLevel)
+	slog.SetDefault(logger)
+
 	runtimeSpawnerAddress = cfg.Controller.SpawnerAddress
+	if runtimeSpawnerAddress == "" {
+		runtimeSpawnerAddress = fmt.Sprintf("http://%s:%d", cfg.Spawner.Hostname, cfg.Spawner.Port)
+	}
+
 	runtimeBaseFolder = cfg.Controller.BaseFolder
 
 	var authenticator auth.Authenticator

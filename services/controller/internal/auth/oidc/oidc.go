@@ -12,8 +12,8 @@ import (
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/idia-astro/go-carta/pkg/config"
-	"github.com/idia-astro/go-carta/services/controller/internal/auth"
+	"github.com/CARTAvis/go-carta/pkg/config"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
 )
 
 const sessionCookieName = "carta_oidc"

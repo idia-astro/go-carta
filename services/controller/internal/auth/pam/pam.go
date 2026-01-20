@@ -12,8 +12,8 @@ import (
 
 	"github.com/msteinert/pam"
 
-	"github.com/idia-astro/go-carta/pkg/config"
-	"github.com/idia-astro/go-carta/services/controller/internal/auth"
+	"github.com/CARTAvis/go-carta/pkg/config"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
 )
 
 type PAMAuthenticator struct {

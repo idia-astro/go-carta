@@ -13,8 +13,8 @@ import (
     "embed"
     "encoding/json"
 
-    "github.com/idia-astro/go-carta/services/controller/internal/session"
-    "github.com/idia-astro/go-carta/services/controller/internal/auth"
+    "github.com/CARTAvis/go-carta/services/controller/internal/session"
+    "github.com/CARTAvis/go-carta/services/controller/internal/auth"
 
 )
 
