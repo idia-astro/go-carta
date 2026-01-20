@@ -226,6 +226,30 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 
 var oidcAuth *authoidc.OIDCAuthenticator
 
+
+// main is the entry point for the CARTA controller service.
+//
+// It performs the following high-level tasks:
+//
+//   1. Initializes structured logging using slog and configures the log
+//      level from command-line flags and configuration files.
+//   2. Defines and parses command-line flags that control controller
+//      behaviour, including networking, authentication mode, frontend
+//      serving, and configuration overrides.
+//   3. Loads the merged configuration from file, flags, and overrides,
+//      and derives runtime values such as the spawner address and base
+//      data directory.
+//   4. Initializes the selected authentication mechanism (none, PAM,
+//      OIDC, or both), and prepares any required login handlers.
+//   5. Optionally serves the CARTA frontend as a single-page application,
+//      including authentication-protected routes and static assets.
+//   6. Registers HTTP handlers for authentication endpoints, the PAM
+//      login page, the SPA root, and the CARTA WebSocket endpoint.
+//   7. Starts the HTTP server and blocks until the server exits or
+//      encounters a fatal error.
+//
+// On fatal configuration or initialization errors, main logs the
+// failure and terminates the process with a non-zero exit status.
 func main() {
 	logger := helpers.NewLogger("controller", "debug")
 	slog.SetDefault(logger)
