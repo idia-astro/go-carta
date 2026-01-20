@@ -43,7 +43,7 @@ func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error)
 
     inst, err := jsonschema.UnmarshalJSON(f)
     if err != nil {
-	    slog.Error("UnmarshalJSON error: %v", err)
+	    slog.Error("UnmarshalJSON error", "err", err)
     }
     if err := c.AddResource("embed://"+path, inst); err != nil {
         return nil, err
@@ -101,14 +101,14 @@ func (h *DbConfig) InitDb() {
 	// Initialize DB connection
 	db, err := sqlx.Connect("postgres", h.ConnString)
 	if err != nil {
-		slog.Error("Error connecting to database: %v", err)
+		slog.Error("Error connecting to database", "err", err)
         os.Exit(-1)
 	}
 	h.db = db
 
 	// Ensure tables exist
 	if err := h.EnsureTables(); err != nil {
-		slog.Error("Error ensuring database tables: %v", err)
+		slog.Error("Error ensuring database tables", "err", err)
         os.Exit(-1)
 	}
 
@@ -116,22 +116,22 @@ func (h *DbConfig) InitDb() {
     c := jsonschema.NewCompiler()
     h.PrefSchema, err = loadSchema(c, "schemas/preferences_schema_2.json")
     if err != nil {
-        slog.Error("Error loading preferences schema: %v", err)
+        slog.Error("Error loading preferences schema", "err", err)
         os.Exit(-1)
     }
     h.LayoutSchema, err = loadSchema(c, "schemas/layout_schema_2.json")
     if err != nil {
-        slog.Error("Error loading layout schema: %v", err)
+        slog.Error("Error loading layout schema", "err", err)
         os.Exit(-1)
     }
     h.SnippetSchema, err = loadSchema(c, "schemas/snippet_schema_1.json")
     if err != nil {
-        slog.Error("Error loading snippet schema: %v", err)
+        slog.Error("Error loading snippet schema", "err", err)
         os.Exit(-1)
     }
     h.WorkspaceSchema, err = loadSchema(c, "schemas/workspace_schema_1.json")
     if err != nil {
-        slog.Error("Error loading workspace schema: %v", err)
+        slog.Error("Error loading workspace schema", "err", err)
         os.Exit(-1)
     }
 }
@@ -162,7 +162,7 @@ func writeJSONResponse(w http.ResponseWriter, status int, message string) {
     }
 
     if err := json.NewEncoder(w).Encode(resp); err != nil {
-        slog.Error("Error encoding JSON response: %v", err)
+        slog.Error("Error encoding JSON response", "err", err)
     }
 }
 
@@ -184,7 +184,7 @@ func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
         "success": true,
         "preferences": empty,
     }); err != nil {
-        slog.Error("Error encoding JSON response: %v", err)
+        slog.Error("Error encoding JSON response", "err", err)
     }
 }
 

@@ -251,7 +251,7 @@ func main() {
 		"base_folder":     "controller.base_folder",
 		"frontend_dir":    "controller.frontend_dir",
 		"auth_mode":       "controller.auth_mode",
-		"db_conn_string":  "controller.DBConnectionString",
+		"db_conn_string":  "controller.db_conn_string",
 	})
 
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
@@ -316,7 +316,7 @@ func main() {
 	}
 
 	if (cfg.Controller.DBConnectionString != "") {
-		slog.Info("Database connection string provided: %s", cfg.Controller.DBConnectionString)
+		slog.Debug("Database connection string provided", "db_conn_string", cfg.Controller.DBConnectionString)
 		db := database.DbConfig{
 			ConnString: cfg.Controller.DBConnectionString,
 		}
@@ -327,7 +327,7 @@ func main() {
 				withAuth(authenticator,
 					http.StripPrefix("/api/database", http.Handler(db.Router())))))
 	} else {
-		slog.Info("Defaulting to backend's filesystem-based state-saving")
+		slog.Debug("Defaulting to backend's filesystem-based state-saving")
 	}
 
 	// If a frontend directory is provided, serve carta_frontend from there
@@ -378,7 +378,7 @@ func main() {
 		}
 
 		if err := json.NewEncoder(w).Encode(cfg); err != nil {
-			slog.Error("Error encoding config: %v", err)
+			slog.Error("Error encoding config", "err", err)
 		}
 	}
 	http.Handle("/config", http.HandlerFunc(cfgHandler))
