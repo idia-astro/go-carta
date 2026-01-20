@@ -16,10 +16,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
 
-	"github.com/idia-astro/go-carta/pkg/config"
-	helpers "github.com/idia-astro/go-carta/pkg/shared"
-	"github.com/idia-astro/go-carta/services/spawner/internal/httpHelpers"
-	"github.com/idia-astro/go-carta/services/spawner/internal/processHelpers"
+	"github.com/CARTAvis/go-carta/pkg/config"
+	helpers "github.com/CARTAvis/go-carta/pkg/shared"
+	"github.com/CARTAvis/go-carta/services/spawner/internal/httpHelpers"
+	"github.com/CARTAvis/go-carta/services/spawner/internal/processHelpers"
 )
 
 type WorkerInfo struct {

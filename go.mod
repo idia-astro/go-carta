@@ -1,4 +1,4 @@
-module github.com/idia-astro/go-carta
+module github.com/CARTAvis/go-carta
 
 go 1.25.0
 

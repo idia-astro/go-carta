@@ -5,7 +5,7 @@ package pamwrap
 import (
 	"net/http"
 
-	"github.com/idia-astro/go-carta/pkg/config"
+	"github.com/CARTAvis/go-carta/pkg/config"
 )
 
 func newImpl(cfg config.PAMConfig) (Authenticator, error) {

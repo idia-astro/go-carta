@@ -14,13 +14,13 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/spf13/pflag"
 
-	"github.com/idia-astro/go-carta/pkg/config"
-	helpers "github.com/idia-astro/go-carta/pkg/shared"
-	"github.com/idia-astro/go-carta/services/controller/internal/session"
+	"github.com/CARTAvis/go-carta/pkg/config"
+	helpers "github.com/CARTAvis/go-carta/pkg/shared"
+	"github.com/CARTAvis/go-carta/services/controller/internal/session"
 
-	"github.com/idia-astro/go-carta/services/controller/internal/auth"
-	authoidc "github.com/idia-astro/go-carta/services/controller/internal/auth/oidc"
-	"github.com/idia-astro/go-carta/services/controller/internal/auth/pamwrap"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
+	authoidc "github.com/CARTAvis/go-carta/services/controller/internal/auth/oidc"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth/pamwrap"
 )
 
 var (
