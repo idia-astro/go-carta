@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
+	"github.com/CARTAvis/go-carta/pkg/cartaDefinitions"
 )
 
 const IcdVersion = 30

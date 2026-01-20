@@ -8,10 +8,10 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/idia-astro/go-carta/pkg/cartaDefinitions"
-	"github.com/idia-astro/go-carta/services/controller/internal/auth"
-	"github.com/idia-astro/go-carta/services/controller/internal/cartaHelpers"
-	"github.com/idia-astro/go-carta/services/controller/internal/spawnerHelpers"
+	"github.com/CARTAvis/go-carta/pkg/cartaDefinitions"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
+	"github.com/CARTAvis/go-carta/services/controller/internal/cartaHelpers"
+	"github.com/CARTAvis/go-carta/services/controller/internal/spawnerHelpers"
 )
 
 type contextKey string
@@ -26,7 +26,7 @@ type Session struct {
 	User           *auth.User
 	Context        context.Context
 	Cancel         context.CancelFunc
-	
+
 	clientSendChan chan []byte
 	// maps incoming file IDs to the internal IDs of the workers
 	fileMap      map[int32]*SessionWorker
@@ -41,15 +41,15 @@ var handlerMap = map[cartaDefinitions.EventType]func(*Session, cartaDefinitions.
 }
 
 func NewSession(conn *websocket.Conn, workerAddr string, folder string, user *auth.User) *Session {
-    ctx, cancel := context.WithCancel(context.Background())
-    return &Session{
-        WebSocket:      conn,
-        SpawnerAddress: workerAddr,
-        BaseFolder:     folder,
-        User:           user,
-        Context:        ctx,
-        Cancel:         cancel,
-    }
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Session{
+		WebSocket:      conn,
+		SpawnerAddress: workerAddr,
+		BaseFolder:     folder,
+		User:           user,
+		Context:        ctx,
+		Cancel:         cancel,
+	}
 }
 
 func (s *Session) checkAndParse(msg proto.Message, requestId uint32, rawMsg []byte) error {

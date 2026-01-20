@@ -13,12 +13,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"github.com/idia-astro/go-carta/services/controller/internal/config"
-	"github.com/idia-astro/go-carta/services/controller/internal/session"
+	"github.com/CARTAvis/go-carta/services/controller/internal/config"
+	"github.com/CARTAvis/go-carta/services/controller/internal/session"
 
-	"github.com/idia-astro/go-carta/services/controller/internal/auth"
-	authoidc "github.com/idia-astro/go-carta/services/controller/internal/auth/oidc"
-	pamwrap "github.com/idia-astro/go-carta/services/controller/internal/auth/pamwrap"
+	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
+	authoidc "github.com/CARTAvis/go-carta/services/controller/internal/auth/oidc"
+	pamwrap "github.com/CARTAvis/go-carta/services/controller/internal/auth/pamwrap"
 )
 
 var (
@@ -59,7 +59,7 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath.Join(h.root, "index.html"))
 		return
 	}
-	
+
 	// Map URL path to filesystem path
 	fullPath := filepath.Join(h.root, filepath.Clean(path))
 
