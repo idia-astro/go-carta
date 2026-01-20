@@ -40,6 +40,7 @@ func SpawnWorker(ctx context.Context, workerPath string, timeoutDuration time.Du
 	args := []string{"--debug_no_auth"}
 	args = append(args, "--no_frontend")
 	args = append(args, "--no_database")
+	args = append(args, "--controller_deployment")
 	args = append(args, "--verbosity", "5")
 	args = append(args, "--exit_timeout", "10")
 	args = append(args, "--initial_timeout", "20")

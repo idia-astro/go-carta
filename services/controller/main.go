@@ -322,26 +322,6 @@ func main() {
 		http.Handle("/pam-login", pamLoginHandler(pamAuth))
 	}
 
-
-	cfgHandler := func(w http.ResponseWriter, r *http.Request) {
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-
-		cfg := map[string]string{
-			//"dashboardAddress":     "/dashboard", // no dashboard ... causes redirect
-			"apiAddress":           "/api",
-			"tokenRefreshAddress":  "/api/auth/refresh",
-			"logoutAddress":        "/api/auth/logout",
-			"authPath":             "/api/auth/refresh",
-		}
-
-		if err := json.NewEncoder(w).Encode(cfg); err != nil {
-			log.Printf("Error encoding config: %v", err)
-		}
-	}
-	http.Handle("/config", http.HandlerFunc(cfgHandler))
-
 	// If a frontend directory is provided, serve carta_frontend from there
 	if cfg.FrontendDir != "" {
 		info, err := os.Stat(cfg.FrontendDir)
@@ -364,6 +344,27 @@ func main() {
 	} else {
 		log.Print("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}
+
+	cfgHandler := func(w http.ResponseWriter, r *http.Request) {
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		cfg := map[string]string{
+			//"dashboardAddress":     "/dashboard", // no dashboard ... causes redirect
+			"apiAddress":           "/api",
+			"tokenRefreshAddress":  "/api/auth/refresh",
+			"logoutAddress":        "/api/auth/logout",
+			"authPath":             "/api/auth/refresh",
+		}
+
+		if err := json.NewEncoder(w).Encode(cfg); err != nil {
+			log.Printf("Error encoding config: %v", err)
+		}
+	}
+	http.Handle("/config", http.HandlerFunc(cfgHandler))
+	http.Handle("/config/", http.HandlerFunc(cfgHandler))
+
 
 	addr := fmt.Sprintf("%s:%d", cfg.Hostname, cfg.Port)
 	log.Printf("Listening on %s\n", addr)
