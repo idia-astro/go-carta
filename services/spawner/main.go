@@ -55,7 +55,7 @@ func main() {
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 
 	// Update the logger to use the configured log level
-	logger = helpers.NewLogger("controller", cfg.LogLevel)
+	logger = helpers.NewLogger("spawner", cfg.LogLevel)
 	slog.SetDefault(logger)
 
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
