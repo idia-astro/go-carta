@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"log/slog"
 
 	"github.com/CARTAvis/go-carta/pkg/config"
 	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
@@ -22,5 +23,6 @@ func New(cfg config.PAMConfig) (Authenticator, error) {
 }
 
 func SetSessionCookie(w http.ResponseWriter, username string) error {
+	slog.Debug("Setting PAM session cookie")
 	return setSessionCookieImpl(w, username)
 }
