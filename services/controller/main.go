@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"html/template"
 	"strings"
+	"embed"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -154,6 +155,8 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 	})
 }
 
+//go:embed templates/*.html
+var templates embed.FS
 var pamLoginTmpl *template.Template
 
 func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
@@ -262,7 +265,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	pamLoginTmpl = template.Must(
-    template.ParseFiles("services/controller/templates/pam_login.html"),
+		template.ParseFS(templates, "templates/pam_login.html"),
 	)
 
 	runtimeSpawnerAddress = cfg.Controller.SpawnerAddress
