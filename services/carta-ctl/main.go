@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"html/template"
 	"strings"
+	"embed"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -212,11 +214,8 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 				return
 			}
 
-			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
-				slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
-				http.Error(w, "Session error", http.StatusInternalServerError)
-				return
-			}
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Handling PAM login request", "method", r.Method)
 
 			http.Redirect(w, r, "/", http.StatusFound)
 
