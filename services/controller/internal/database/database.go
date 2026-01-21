@@ -27,7 +27,7 @@ import (
 var schemaFiles embed.FS
 
 const PREFERENCE_SCHEMA_VERSION = 2;
-//const LAYOUT_SCHEMA_VERSION = 2;
+const LAYOUT_SCHEMA_VERSION = 2;
 //const SNIPPET_SCHEMA_VERSION = 1;
 //const WORKSPACE_SCHEMA_VERSION = 0;
 
@@ -273,7 +273,7 @@ func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) 
     writeJSONResponse(w, http.StatusOK, "Preferences set successfully")
 }
 
-func (h *DbConfig) handleDeletePreferences(w http.ResponseWriter, r *http.Request) {
+func (h *DbConfig) handleClearPreferences(w http.ResponseWriter, r *http.Request) {
     slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
 
     user := getUsername(r)
@@ -303,7 +303,7 @@ func (h *DbConfig) handleDeletePreferences(w http.ResponseWriter, r *http.Reques
     slog.Debug("Clearing preference keys", "user", user, "keys", body.Keys)
 
     // Update DB to remove keys
-    result, err := h.db.ExecContext(
+    _, err := h.db.ExecContext(
         r.Context(),
         `UPDATE preferences
          SET content = content - $2::text[]
@@ -311,8 +311,6 @@ func (h *DbConfig) handleDeletePreferences(w http.ResponseWriter, r *http.Reques
         user,
         pq.Array(body.Keys),
     )
-
-    slog.Debug("Clear preferences result", "result", result)
 
     if err != nil {
         slog.Error("Error clearing preferences", "err", err)
@@ -328,16 +326,207 @@ func (h *DbConfig) handleDeletePreferences(w http.ResponseWriter, r *http.Reques
         slog.Error("Error encoding JSON response", "err", err)
     }
 }
+
+func (h *DbConfig) handleGetLayouts(w http.ResponseWriter, r *http.Request) {
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+    user := getUsername(r)
+    if user == "" {
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+        return
+    } else {
+        slog.Debug("Getting layouts for user", "user", user)
+    }
+
+    // Query all layouts for this user
+    rows, err := h.db.QueryContext(
+        r.Context(),
+        `SELECT name, content
+         FROM layouts
+         WHERE username = $1`,
+        user,
+    )
+    if err != nil {
+        slog.Error("DB error fetching layouts", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to fetch layouts")
+        return
+    }
+    defer rows.Close()
+
+    // Build the response map
+    layouts := make(map[string]any)
+
+    for rows.Next() {
+        var name string
+        var raw json.RawMessage
+
+        if err := rows.Scan(&name, &raw); err != nil {
+            slog.Error("Error scanning layout row", "err", err)
+            continue
+        }
+
+        // Decode JSONB content
+        var layout any
+        if err := json.Unmarshal(raw, &layout); err != nil {
+            slog.Warn("Invalid JSON in stored layout", "name", name, "err", err)
+            continue
+        }
+
+        // Validate layout (your existing schema validator)
+        if err := h.LayoutSchema.Validate(layout); err != nil {
+            slog.Warn("Returning invalid layout", "name", name, "err", err)
+        }
+
+        layouts[name] = layout
+    }
+
+    if err := rows.Err(); err != nil {
+        slog.Error("Row iteration error", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to read layouts")
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    if err := json.NewEncoder(w).Encode(map[string]any{
+        "success": true,
+        "layouts": layouts,
+    }); err != nil {
+        slog.Error("Error encoding JSON response", "err", err)
+    }
+}
+
+func (h *DbConfig) handleSetLayout(w http.ResponseWriter, r *http.Request) {
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+    user := getUsername(r)
+    if user == "" {
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+        return
+    } else {
+        slog.Debug("Getting layouts for user", "user", user)
+    }
+
+    // Parse JSON body
+    var body struct {
+        Name   string      `json:"layoutName"`
+        Layout map[string]any `json:"layout"`
+    }
+
+    dec := json.NewDecoder(r.Body)
+    if err := dec.Decode(&body); err != nil {
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+        return
+    }
+
+    version, ok := body.Layout["layoutVersion"].(float64)
+    if body.Name == "" || body.Layout == nil || !ok || int(version) != LAYOUT_SCHEMA_VERSION {
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed layout update")
+        return
+    }
+
+    // Validate layout using your schema
+    if err := h.LayoutSchema.Validate(body.Layout); err != nil {
+        slog.Warn("Layout validation failed", "name", body.Name, "err", err)
+        writeJSONResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid layout update: %v", err))
+        return
+    }
+
+    // Marshal layout to JSONB
+    jsonBytes, err := json.Marshal(body.Layout)
+    if err != nil {
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to encode layout as JSON")
+        return
+    }
+
+    // UPSERT into Postgres
+    _, err = h.db.ExecContext(
+        r.Context(),
+        `INSERT INTO layouts (name, username, content)
+         VALUES ($1, $2, $3::jsonb)
+         ON CONFLICT (name, username)
+         DO UPDATE SET content = EXCLUDED.content`,
+        body.Name, user, jsonBytes,
+    )
+
+    if err != nil {
+        slog.Error("Failed to store layout", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to store layout")
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    if err := json.NewEncoder(w).Encode(map[string]any{
+        "success": true,
+    }); err != nil {
+        slog.Error("Error encoding JSON response", "err", err)
+    }
+}
+
+func (h *DbConfig) handleClearLayout(w http.ResponseWriter, r *http.Request) {
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+    user := getUsername(r)
+    if user == "" {
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+        return
+    } else {
+        slog.Debug("Clearing layout for user", "user", user)
+    }
+
+    // Parse JSON body
+    var body struct {
+        LayoutName string `json:"layoutName"`
+    }
+    dec := json.NewDecoder(r.Body)
+    if err := dec.Decode(&body); err != nil {
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+        return
+    }
+    // Validate layout name
+    if body.LayoutName == "" {
+        slog.Debug("Malformed layout name received for clearing layout")
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed layout name")
+        return
+    }
+
+    slog.Debug("Clearing layout", "user", user, "layoutName", body.LayoutName)
+
+    // Update DB to remove layout
+    _, err := h.db.ExecContext(
+        r.Context(),
+        `DELETE FROM layouts
+         WHERE name = $2 AND username = $1`,
+        user,
+        body.LayoutName,
+    )
+
+    if err != nil {
+        slog.Error("Error removing layout", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Problem removing layout")
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    if err := json.NewEncoder(w).Encode(map[string]any{
+        "success": true,
+    }); err != nil {
+        slog.Error("Error encoding JSON response", "err", err)
+    }
+}
+
 func (h *DbConfig) Router() http.Handler {
     mux := http.NewServeMux()
 
     mux.Handle("GET /preferences", http.HandlerFunc(h.handleGetPreferences))
     mux.Handle("PUT /preferences", http.HandlerFunc(h.handleSetPreferences))
-    mux.Handle("DELETE /preferences", http.HandlerFunc(h.handleDeletePreferences))
+    mux.Handle("DELETE /preferences", http.HandlerFunc(h.handleClearPreferences))
 
-    mux.Handle("GET /layouts", http.HandlerFunc(notImplemented))
-    mux.Handle("PUT /layout", http.HandlerFunc(notImplemented))
-    mux.Handle("DELETE /layout", http.HandlerFunc(notImplemented))
+    mux.Handle("GET /layouts", http.HandlerFunc(h.handleGetLayouts))
+    mux.Handle("PUT /layout", http.HandlerFunc(h.handleSetLayout))
+    mux.Handle("DELETE /layout", http.HandlerFunc(h.handleClearLayout))
 
     mux.Handle("GET /snippets", http.HandlerFunc(notImplemented))
     mux.Handle("PUT /snippet", http.HandlerFunc(notImplemented))
