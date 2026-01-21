@@ -7,7 +7,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/CARTAvis/go-carta/pkg/cartaDefinitions"
-	"github.com/CARTAvis/go-carta/services/controller/internal/spawnerHelpers"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/spawnerHelpers"
 )
 
 // OpenFile needs to spin up a new worker and proxy the message to it

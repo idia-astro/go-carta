@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
-	"html/template"
 	"strings"
-	"embed"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -18,11 +18,11 @@ import (
 
 	"github.com/CARTAvis/go-carta/pkg/config"
 	helpers "github.com/CARTAvis/go-carta/pkg/shared"
-	"github.com/CARTAvis/go-carta/services/controller/internal/session"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/session"
 
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
-	authoidc "github.com/CARTAvis/go-carta/services/controller/internal/auth/oidc"
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth/pamwrap"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
+	authoidc "github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth/oidc"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth/pamwrap"
 )
 
 var (
@@ -160,77 +160,77 @@ var templates embed.FS
 var pamLoginTmpl *template.Template
 
 func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
-    slog.Info("Setting up PAM login handler")
+	slog.Info("Setting up PAM login handler")
 
-    type pageData struct {
-        Title   string
-        Heading string
-        Error   string
-    }
+	type pageData struct {
+		Title   string
+		Heading string
+		Error   string
+	}
 
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("Handling PAM login request", "method", r.Method)
 
-        switch r.Method {
+		switch r.Method {
 
-        case http.MethodGet:
-            w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		case http.MethodGet:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-            _ = pamLoginTmpl.Execute(w, pageData{
-                Title:   "CARTA Login",
-                Heading: "CARTA Login (PAM)",
-            })
+			_ = pamLoginTmpl.Execute(w, pageData{
+				Title:   "CARTA Login",
+				Heading: "CARTA Login (PAM)",
+			})
 
-        case http.MethodPost:
-            if err := r.ParseForm(); err != nil {
-                http.Error(w, "Bad form", http.StatusBadRequest)
-                return
-            }
+		case http.MethodPost:
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "Bad form", http.StatusBadRequest)
+				return
+			}
 
-            username := r.Form.Get("username")
-            password := r.Form.Get("password")
+			username := r.Form.Get("username")
+			password := r.Form.Get("password")
 
-            if username == "" || password == "" {
-                w.WriteHeader(http.StatusBadRequest)
-                _ = pamLoginTmpl.Execute(w, pageData{
-                    Title:   "CARTA Login",
-                    Heading: "CARTA Login (PAM)",
-                    Error:   "Missing username or password",
-                })
-                return
-            }
+			if username == "" || password == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = pamLoginTmpl.Execute(w, pageData{
+					Title:   "CARTA Login",
+					Heading: "CARTA Login (PAM)",
+					Error:   "Missing username or password",
+				})
+				return
+			}
 
-            user, err := p.AuthenticateCredentials(r.Context(), username, password)
-            if err != nil {
-                slog.Error("PAM login failed", "username", username, "error", err)
-                w.WriteHeader(http.StatusUnauthorized)
-                _ = pamLoginTmpl.Execute(w, pageData{
-                    Title:   "CARTA Login",
-                    Heading: "CARTA Login (PAM)",
-                    Error:   "Invalid credentials",
-                })
-                return
-            }
+			user, err := p.AuthenticateCredentials(r.Context(), username, password)
+			if err != nil {
+				slog.Error("PAM login failed", "username", username, "error", err)
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = pamLoginTmpl.Execute(w, pageData{
+					Title:   "CARTA Login",
+					Heading: "CARTA Login (PAM)",
+					Error:   "Invalid credentials",
+				})
+				return
+			}
 
-            if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
-                slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
-                http.Error(w, "Session error", http.StatusInternalServerError)
-                return
-            }
+			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
+				slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
+				http.Error(w, "Session error", http.StatusInternalServerError)
+				return
+			}
 
-            http.Redirect(w, r, "/", http.StatusFound)
+			http.Redirect(w, r, "/", http.StatusFound)
 
-        default:
-            slog.Warn("Ignoring unsupported method", "method", r.Method)
-            w.WriteHeader(http.StatusMethodNotAllowed)
-        }
-    })
+		default:
+			slog.Warn("Ignoring unsupported method", "method", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
 }
 
 var oidcAuth *authoidc.OIDCAuthenticator
 
 func main() {
-	logger := helpers.NewLogger("controller", "info")
+	logger := helpers.NewLogger("carta-ctl", "info")
 	slog.SetDefault(logger)
 
 	id := uuid.New()
@@ -248,6 +248,12 @@ func main() {
 
 	pflag.Parse()
 
+	slog.Info("Parsed flags",
+  	"auth_mode", pflag.Lookup("auth_mode").Value.String(),
+  	"override",  pflag.Lookup("override").Value.String(),
+  	"config",    pflag.Lookup("config").Value.String(),
+	)
+
 	config.BindFlags(map[string]string{
 		"log_level":       "log_level",
 		"port":            "controller.port",
@@ -260,8 +266,11 @@ func main() {
 
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 
+	slog.Info("Cfg auth_mode", "authMode", cfg.Controller.AuthMode)
+	slog.Info("Cfg auth_mode", "cfg.Controller.AuthMode", cfg.Controller.AuthMode)
+
 	// Update the logger to use the configured log level
-	logger = helpers.NewLogger("controller", cfg.LogLevel)
+	logger = helpers.NewLogger("carta-ctl", cfg.LogLevel)
 	slog.SetDefault(logger)
 
 	pamLoginTmpl = template.Must(
@@ -309,7 +318,7 @@ func main() {
 		)
 
 	default:
-		slog.Error("Unknown config option", "authMod", cfg.Controller.AuthMode)
+		slog.Error("Unknown config option", "authMode", cfg.Controller.AuthMode)
 		os.Exit(1)
 	}
 	// Default baseFolder to $HOME if unset

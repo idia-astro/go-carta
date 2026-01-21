@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/CARTAvis/go-carta/pkg/config"
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
 )
 
 var ErrUnsupported = errors.New("PAM auth is only supported on Linux")

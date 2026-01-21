@@ -13,7 +13,7 @@ import (
 	"github.com/msteinert/pam"
 
 	"github.com/CARTAvis/go-carta/pkg/config"
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
 )
 
 type PAMAuthenticator struct {

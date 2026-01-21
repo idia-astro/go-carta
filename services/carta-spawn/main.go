@@ -18,8 +18,8 @@ import (
 
 	"github.com/CARTAvis/go-carta/pkg/config"
 	helpers "github.com/CARTAvis/go-carta/pkg/shared"
-	"github.com/CARTAvis/go-carta/services/spawner/internal/httpHelpers"
-	"github.com/CARTAvis/go-carta/services/spawner/internal/processHelpers"
+	"github.com/CARTAvis/go-carta/services/carta-spawn/internal/httpHelpers"
+	"github.com/CARTAvis/go-carta/services/carta-spawn/internal/processHelpers"
 )
 
 type WorkerInfo struct {
@@ -28,7 +28,7 @@ type WorkerInfo struct {
 }
 
 func main() {
-	logger := helpers.NewLogger("spawner", "info")
+	logger := helpers.NewLogger("carta-spawn", "info")
 	slog.SetDefault(logger)
 
 	id := uuid.New()
@@ -55,7 +55,7 @@ func main() {
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 
 	// Update the logger to use the configured log level
-	logger = helpers.NewLogger("spawner", cfg.LogLevel)
+	logger = helpers.NewLogger("carta-spawn", cfg.LogLevel)
 	slog.SetDefault(logger)
 
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
