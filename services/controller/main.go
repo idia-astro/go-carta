@@ -160,71 +160,71 @@ var templates embed.FS
 var pamLoginTmpl *template.Template
 
 func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
-    slog.Info("Setting up PAM login handler")
+	slog.Info("Setting up PAM login handler")
 
-    type pageData struct {
-        Title   string
-        Heading string
-        Error   string
-    }
+	type pageData struct {
+		Title   string
+		Heading string
+		Error   string
+	}
 
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("Handling PAM login request", "method", r.Method)
 
-        switch r.Method {
+		switch r.Method {
 
-        case http.MethodGet:
-            w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		case http.MethodGet:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-            _ = pamLoginTmpl.Execute(w, pageData{
-                Title:   "CARTA Login",
-                Heading: "CARTA Login (PAM)",
-            })
+			_ = pamLoginTmpl.Execute(w, pageData{
+				Title:   "CARTA Login",
+				Heading: "CARTA Login (PAM)",
+			})
 
-        case http.MethodPost:
-            if err := r.ParseForm(); err != nil {
-                http.Error(w, "Bad form", http.StatusBadRequest)
-                return
-            }
+		case http.MethodPost:
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "Bad form", http.StatusBadRequest)
+				return
+			}
 
-            username := r.Form.Get("username")
-            password := r.Form.Get("password")
+			username := r.Form.Get("username")
+			password := r.Form.Get("password")
 
-            if username == "" || password == "" {
-                w.WriteHeader(http.StatusBadRequest)
-                _ = pamLoginTmpl.Execute(w, pageData{
-                    Title:   "CARTA Login",
-                    Heading: "CARTA Login (PAM)",
-                    Error:   "Missing username or password",
-                })
-                return
-            }
+			if username == "" || password == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = pamLoginTmpl.Execute(w, pageData{
+					Title:   "CARTA Login",
+					Heading: "CARTA Login (PAM)",
+					Error:   "Missing username or password",
+				})
+				return
+			}
 
-            user, err := p.AuthenticateCredentials(r.Context(), username, password)
-            if err != nil {
-                slog.Error("PAM login failed", "username", username, "error", err)
-                w.WriteHeader(http.StatusUnauthorized)
-                _ = pamLoginTmpl.Execute(w, pageData{
-                    Title:   "CARTA Login",
-                    Heading: "CARTA Login (PAM)",
-                    Error:   "Invalid credentials",
-                })
-                return
-            }
+			user, err := p.AuthenticateCredentials(r.Context(), username, password)
+			if err != nil {
+				slog.Error("PAM login failed", "username", username, "error", err)
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = pamLoginTmpl.Execute(w, pageData{
+					Title:   "CARTA Login",
+					Heading: "CARTA Login (PAM)",
+					Error:   "Invalid credentials",
+				})
+				return
+			}
 
-            if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
-                slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
-                http.Error(w, "Session error", http.StatusInternalServerError)
-                return
-            }
+			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
+				slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
+				http.Error(w, "Session error", http.StatusInternalServerError)
+				return
+			}
 
-            http.Redirect(w, r, "/", http.StatusFound)
+			http.Redirect(w, r, "/", http.StatusFound)
 
-        default:
-            slog.Warn("Ignoring unsupported method", "method", r.Method)
-            w.WriteHeader(http.StatusMethodNotAllowed)
-        }
-    })
+		default:
+			slog.Warn("Ignoring unsupported method", "method", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
 }
 
 var oidcAuth *authoidc.OIDCAuthenticator
