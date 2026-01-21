@@ -351,7 +351,11 @@ func (h *DbConfig) handleGetLayouts(w http.ResponseWriter, r *http.Request) {
         writeJSONResponse(w, http.StatusInternalServerError, "Failed to fetch layouts")
         return
     }
-    defer rows.Close()
+    defer func() {
+        if err := rows.Close(); err != nil {
+            slog.Warn("error closing rows", "err", err)
+        }
+    }()
 
     // Build the response map
     layouts := make(map[string]any)
