@@ -222,7 +222,6 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 
 var oidcAuth *authoidc.OIDCAuthenticator
 
-
 func main() {
 	logger := helpers.NewLogger("controller", "info")
 	slog.SetDefault(logger)
@@ -315,7 +314,7 @@ func main() {
 		slog.Debug("Using default base folder", "dirname", dirname)
 	}
 
-	if (cfg.Controller.DBConnectionString != "") {
+	if cfg.Controller.DBConnectionString != "" {
 		slog.Debug("Database connection string provided", "db_conn_string", cfg.Controller.DBConnectionString)
 		db := database.DbConfig{
 			ConnString: cfg.Controller.DBConnectionString,
@@ -370,11 +369,11 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 
 		cfg := map[string]string{
-			"dashboardAddress":     "/dashboard", // no dashboard ... causes redirect
-			"apiAddress":           "/api",
+			"dashboardAddress": "/dashboard", // no dashboard ... causes redirect
+			"apiAddress":       "/api",
 			//"tokenRefreshAddress":  "/api/auth/refresh",
-			"logoutAddress":        "/api/auth/logout",
-			"authPath":             "/api/auth/refresh",
+			"logoutAddress": "/api/auth/logout",
+			"authPath":      "/api/auth/refresh",
 		}
 
 		if err := json.NewEncoder(w).Encode(cfg); err != nil {
