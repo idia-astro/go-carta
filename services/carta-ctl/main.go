@@ -212,6 +212,7 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 				return
 			}
 
+<<<<<<< HEAD:services/carta-ctl/main.go
     		// success
 			slog.Info("PAM login succeeded", "username", user.Username)
 			http.Redirect(w, r, "/", http.StatusFound)
@@ -221,6 +222,19 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 			slog.Warn("Ignoring unsupported method", "method", r.Method)
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
+=======
+			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
+				slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
+				http.Error(w, "Session error", http.StatusInternalServerError)
+				return
+			}
+
+			http.Redirect(w, r, "/", http.StatusFound)
+
+		default:
+			slog.Warn("Ignoring unsupported method", "method", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+>>>>>>> main:services/controller/main.go
 		}
 	})
 }
