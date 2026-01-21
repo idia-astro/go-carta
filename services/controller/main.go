@@ -372,7 +372,7 @@ func main() {
 		cfg := map[string]string{
 			"dashboardAddress":     "/dashboard", // no dashboard ... causes redirect
 			"apiAddress":           "/api",
-			"tokenRefreshAddress":  "/api/auth/refresh",
+			//"tokenRefreshAddress":  "/api/auth/refresh",
 			"logoutAddress":        "/api/auth/logout",
 			"authPath":             "/api/auth/refresh",
 		}

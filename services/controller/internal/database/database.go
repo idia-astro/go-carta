@@ -6,8 +6,9 @@ import (
     "fmt"
     "os"
 
+    "database/sql"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 
     "github.com/santhosh-tekuri/jsonschema/v6"
     "embed"
@@ -170,19 +171,54 @@ func writeJSONResponse(w http.ResponseWriter, status int, message string) {
 func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
     slog.Debug("DB API called: %s %s", r.Method, r.URL.Path)
 
-    empty := map[string]any{}
-    empty["version"] = 2
-    err := h.PrefSchema.Validate(empty)
-    if err != nil {
-        http.Error(w, fmt.Sprintf("validation failed: %v", err), http.StatusInternalServerError)
+    user := getUsername(r)
+    if user == "" {
+        // No username means an error ... rather than unauthorized as `withAuth` should have caught this
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
         return
     }
 
+    // Query DB
+    var raw json.RawMessage
+    err := h.db.GetContext(r.Context(), &raw,
+        `SELECT content FROM preferences WHERE username = $1`,
+        user,
+    )
+    var prefs map[string]any
+
+    switch {
+    case err == sql.ErrNoRows:
+        // Defaults
+        prefs = map[string]any{"version": PREFERENCE_SCHEMA_VERSION}
+        if err := h.PrefSchema.Validate(prefs); err != nil {
+            writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Default preferences validation failed: %v", err))
+            return
+        }
+
+    case err != nil:
+        writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to query preferences: %v", err))
+        return
+
+    default:
+        // Decode JSONB from DB
+        if err := json.Unmarshal(raw, &prefs); err != nil {
+            writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to decode stored preferences: %v", err))
+            return
+        }
+
+        // Validate + apply defaults
+        if err := h.PrefSchema.Validate(prefs); err != nil {
+            writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Stored preferences failed validation: %v", err))
+            return
+        }
+    }
+
+    // Respond
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusOK)
     if err := json.NewEncoder(w).Encode(map[string]any{
         "success": true,
-        "preferences": empty,
+        "preferences": prefs,
     }); err != nil {
         slog.Error("Error encoding JSON response", "err", err)
     }
@@ -194,7 +230,8 @@ func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) 
     user := getUsername(r)
     if user == "" {
         // No username means an error ... rather than unauthorized as `withAuth` should have caught this
-        http.Error(w, "Username not found, but passed authorization", http.StatusInternalServerError)
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+        return
     }
 
     // Decode JSON body
@@ -212,13 +249,20 @@ func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) 
         return
     }
 
+    // Remarshal the preferences to ensure proper JSONB format
+    jsonBytes, err := json.Marshal(prefs)
+    if err != nil {
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to encode preferences as JSON")
+        return
+    }
+
     // Persist to DB
-    _, err := h.db.ExecContext(r.Context(),
+    _, err = h.db.ExecContext(r.Context(),
         `INSERT INTO preferences (username, content)
-        VALUES ($1, $2)
+        VALUES ($1, $2::jsonb)
         ON CONFLICT (username)
         DO UPDATE SET content = preferences.content || EXCLUDED.content`,
-        user, prefs,
+        user, jsonBytes,
     )
     if err != nil {
         writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to store preferences: %v", err))
@@ -229,12 +273,61 @@ func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) 
     writeJSONResponse(w, http.StatusOK, "Preferences set successfully")
 }
 
+func (h *DbConfig) handleDeletePreferences(w http.ResponseWriter, r *http.Request) {
+    slog.Debug("DB API called: %s %s", r.Method, r.URL.Path)
+
+    user := getUsername(r)
+    if user == "" {
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+        return
+    }
+
+    // Parse JSON body
+    var body struct {
+        Keys []string `json:"keys"`
+    }
+    dec := json.NewDecoder(r.Body)
+    if err := dec.Decode(&body); err != nil {
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+        return
+    }
+    // Validate keys list
+    if len(body.Keys) == 0 {
+        slog.Debug("Malformed key list received for clearing preferences")
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed key list")
+        return
+    }
+
+    // Update DB to remove keys
+    _, err := h.db.ExecContext(
+        r.Context(),
+        `UPDATE preferences
+         SET content = content - $2
+         WHERE username = $1`,
+        user,
+        pq.Array(body.Keys),
+    )
+
+    if err != nil {
+        slog.Error("Error clearing preferences", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Problem clearing preferences")
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    if err := json.NewEncoder(w).Encode(map[string]any{
+        "success": true,
+    }); err != nil {
+        slog.Error("Error encoding JSON response", "err", err)
+    }
+}
 func (h *DbConfig) Router() http.Handler {
     mux := http.NewServeMux()
 
     mux.Handle("GET /preferences", http.HandlerFunc(h.handleGetPreferences))
     mux.Handle("PUT /preferences", http.HandlerFunc(h.handleSetPreferences))
-    mux.Handle("DELETE /preferences", http.HandlerFunc(notImplemented))
+    mux.Handle("DELETE /preferences", http.HandlerFunc(h.handleDeletePreferences))
 
     mux.Handle("GET /layouts", http.HandlerFunc(notImplemented))
     mux.Handle("PUT /layout", http.HandlerFunc(notImplemented))
