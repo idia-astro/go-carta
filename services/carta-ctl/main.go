@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
-	"html/template"
 	"strings"
-	"embed"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -212,8 +212,7 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 				return
 			}
 
-<<<<<<< HEAD:services/carta-ctl/main.go
-    		// success
+			// success
 			slog.Info("PAM login succeeded", "username", user.Username)
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
@@ -222,19 +221,6 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 			slog.Warn("Ignoring unsupported method", "method", r.Method)
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
-=======
-			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
-				slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
-				http.Error(w, "Session error", http.StatusInternalServerError)
-				return
-			}
-
-			http.Redirect(w, r, "/", http.StatusFound)
-
-		default:
-			slog.Warn("Ignoring unsupported method", "method", r.Method)
-			w.WriteHeader(http.StatusMethodNotAllowed)
->>>>>>> main:services/controller/main.go
 		}
 	})
 }
@@ -261,9 +247,9 @@ func main() {
 	pflag.Parse()
 
 	slog.Info("Parsed flags",
-  	"auth_mode", pflag.Lookup("auth_mode").Value.String(),
-  	"override",  pflag.Lookup("override").Value.String(),
-  	"config",    pflag.Lookup("config").Value.String(),
+		"auth_mode", pflag.Lookup("auth_mode").Value.String(),
+		"override", pflag.Lookup("override").Value.String(),
+		"config", pflag.Lookup("config").Value.String(),
 	)
 
 	config.BindFlags(map[string]string{
