@@ -28,7 +28,7 @@ var schemaFiles embed.FS
 
 const PREFERENCE_SCHEMA_VERSION = 2;
 const LAYOUT_SCHEMA_VERSION = 2;
-//const SNIPPET_SCHEMA_VERSION = 1;
+const SNIPPET_SCHEMA_VERSION = 1;
 //const WORKSPACE_SCHEMA_VERSION = 0;
 
 func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error) {
@@ -376,7 +376,7 @@ func (h *DbConfig) handleGetLayouts(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
-        // Validate layout (your existing schema validator)
+        // Validate layout
         if err := h.LayoutSchema.Validate(layout); err != nil {
             slog.Warn("Returning invalid layout", "name", name, "err", err)
         }
@@ -408,7 +408,7 @@ func (h *DbConfig) handleSetLayout(w http.ResponseWriter, r *http.Request) {
         writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
         return
     } else {
-        slog.Debug("Getting layouts for user", "user", user)
+        slog.Debug("Setting layout for user", "user", user)
     }
 
     // Parse JSON body
@@ -429,7 +429,7 @@ func (h *DbConfig) handleSetLayout(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Validate layout using your schema
+    // Validate layout
     if err := h.LayoutSchema.Validate(body.Layout); err != nil {
         slog.Warn("Layout validation failed", "name", body.Name, "err", err)
         writeJSONResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid layout update: %v", err))
@@ -521,6 +521,200 @@ func (h *DbConfig) handleClearLayout(w http.ResponseWriter, r *http.Request) {
     }
 }
 
+func (h *DbConfig) handleGetSnippets(w http.ResponseWriter, r *http.Request) {
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+    user := getUsername(r)
+    if user == "" {
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+        return
+    } else {
+        slog.Debug("Getting snippets for user", "user", user)
+    }
+
+    // Query all snippets for this user
+    rows, err := h.db.QueryContext(
+        r.Context(),
+        `SELECT name, content
+         FROM snippets
+         WHERE username = $1`,
+        user,
+    )
+    if err != nil {
+        slog.Error("DB error fetching snippets", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to fetch snippets")
+        return
+    }
+    defer func() {
+        if err := rows.Close(); err != nil {
+            slog.Warn("error closing rows", "err", err)
+        }
+    }()
+
+    // Build the response map
+    snippets := make(map[string]any)
+
+    for rows.Next() {
+        var name string
+        var raw json.RawMessage
+
+        if err := rows.Scan(&name, &raw); err != nil {
+            slog.Error("Error scanning snippet row", "err", err)
+            continue
+        }
+
+        // Decode JSONB content
+        var snippet any
+        if err := json.Unmarshal(raw, &snippet); err != nil {
+            slog.Warn("Invalid JSON in stored snippet", "name", name, "err", err)
+            continue
+        }
+
+        // Validate snippet
+        if err := h.SnippetSchema.Validate(snippet); err != nil {
+            slog.Warn("Returning invalid snippet", "name", name, "err", err)
+        }
+
+        snippets[name] = snippet
+    }
+
+    if err := rows.Err(); err != nil {
+        slog.Error("Row iteration error", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to read snippets")
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    if err := json.NewEncoder(w).Encode(map[string]any{
+        "success": true,
+        "snippets": snippets,
+    }); err != nil {
+        slog.Error("Error encoding JSON response", "err", err)
+    }
+}
+
+func (h *DbConfig) handleSetSnippet(w http.ResponseWriter, r *http.Request) {
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+    user := getUsername(r)
+    if user == "" {
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+        return
+    } else {
+        slog.Debug("Setting snippet for user", "user", user)
+    }
+
+    // Parse JSON body
+    var body struct {
+        Name   string      `json:"snippetName"`
+        Snippet map[string]any `json:"snippet"`
+    }
+
+    dec := json.NewDecoder(r.Body)
+    if err := dec.Decode(&body); err != nil {
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+        return
+    }
+
+    version, ok := body.Snippet["snippetVersion"].(float64)
+    if body.Name == "" || body.Snippet == nil || !ok || int(version) != SNIPPET_SCHEMA_VERSION {
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed snippet update")
+        return
+    }
+
+    // Validate snippet
+    if err := h.SnippetSchema.Validate(body.Snippet); err != nil {
+        slog.Warn("Snippet validation failed", "name", body.Name, "err", err)
+        writeJSONResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid snippet update: %v", err))
+        return
+    }
+
+    // Marshal snippet to JSONB
+    jsonBytes, err := json.Marshal(body.Snippet)
+    if err != nil {
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to encode snippet as JSON")
+        return
+    }
+
+    // UPSERT into Postgres
+    _, err = h.db.ExecContext(
+        r.Context(),
+        `INSERT INTO snippets (name, username, content)
+         VALUES ($1, $2, $3::jsonb)
+         ON CONFLICT (name, username)
+         DO UPDATE SET content = EXCLUDED.content`,
+        body.Name, user, jsonBytes,
+    )
+
+    if err != nil {
+        slog.Error("Failed to store snippet", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Failed to store snippet")
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    if err := json.NewEncoder(w).Encode(map[string]any{
+        "success": true,
+    }); err != nil {
+        slog.Error("Error encoding JSON response", "err", err)
+    }
+}
+
+func (h *DbConfig) handleClearSnippet(w http.ResponseWriter, r *http.Request) {
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+    user := getUsername(r)
+    if user == "" {
+        writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+        return
+    } else {
+        slog.Debug("Clearing snippet for user", "user", user)
+    }
+
+    // Parse JSON body
+    var body struct {
+        SnippetName string `json:"snippetName"`
+    }
+    dec := json.NewDecoder(r.Body)
+    if err := dec.Decode(&body); err != nil {
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+        return
+    }
+    // Validate snippet name
+    if body.SnippetName == "" {
+        slog.Debug("Malformed snippet name received for clearing snippet")
+        writeJSONResponse(w, http.StatusBadRequest, "Malformed snippet name")
+        return
+    }
+
+    slog.Debug("Clearing snippet", "user", user, "snippetName", body.SnippetName)
+
+    // Update DB to remove snippet
+    _, err := h.db.ExecContext(
+        r.Context(),
+        `DELETE FROM snippets
+         WHERE name = $2 AND username = $1`,
+        user,
+        body.SnippetName,
+    )
+
+    if err != nil {
+        slog.Error("Error removing snippet", "err", err)
+        writeJSONResponse(w, http.StatusInternalServerError, "Problem removing snippet")
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    if err := json.NewEncoder(w).Encode(map[string]any{
+        "success": true,
+    }); err != nil {
+        slog.Error("Error encoding JSON response", "err", err)
+    }
+}
+
 func (h *DbConfig) Router() http.Handler {
     mux := http.NewServeMux()
 
@@ -532,9 +726,9 @@ func (h *DbConfig) Router() http.Handler {
     mux.Handle("PUT /layout", http.HandlerFunc(h.handleSetLayout))
     mux.Handle("DELETE /layout", http.HandlerFunc(h.handleClearLayout))
 
-    mux.Handle("GET /snippets", http.HandlerFunc(notImplemented))
-    mux.Handle("PUT /snippet", http.HandlerFunc(notImplemented))
-    mux.Handle("DELETE /snippet", http.HandlerFunc(notImplemented))
+    mux.Handle("GET /snippets", http.HandlerFunc(h.handleGetSnippets))
+    mux.Handle("PUT /snippet", http.HandlerFunc(h.handleSetSnippet))
+    mux.Handle("DELETE /snippet", http.HandlerFunc(h.handleClearSnippet))
 
     mux.Handle("POST /share/workspace/{id}", http.HandlerFunc(notImplemented))
 
