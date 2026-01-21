@@ -148,10 +148,7 @@ func Load(configPath string, overrideStr string) *Config {
 			key := strings.TrimSpace(parts[0])
 			value := strings.TrimSpace(parts[1])
 			viper.Set(key, value)
-<<<<<<< HEAD
 			slog.Debug("Config override applied", "key", key, "value", value)
-=======
->>>>>>> main
 		}
 		// Reload config struct to pick up overrides
 		if err := viper.Unmarshal(&cfg); err != nil {
