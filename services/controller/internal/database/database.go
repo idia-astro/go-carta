@@ -148,7 +148,7 @@ func getUsername(r *http.Request) string {
 }
 
 func notImplemented(w http.ResponseWriter, r *http.Request) {
-    slog.Info("DB API called: %s %s (not implemented)", r.Method, r.URL.Path)
+    slog.Warn(fmt.Sprintf("DB API called: %s %s (not implemented)", r.Method, r.URL.Path))
     w.WriteHeader(http.StatusNotImplemented)
     _, _ = w.Write([]byte("Not implemented"))
 }
@@ -169,7 +169,7 @@ func writeJSONResponse(w http.ResponseWriter, status int, message string) {
 
 
 func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
-    slog.Debug("DB API called: %s %s", r.Method, r.URL.Path)
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
 
     user := getUsername(r)
     if user == "" {
@@ -225,7 +225,7 @@ func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) {
-    slog.Debug("DB API called: %s %s", r.Method, r.URL.Path)
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
 
     user := getUsername(r)
     if user == "" {
@@ -274,12 +274,14 @@ func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *DbConfig) handleDeletePreferences(w http.ResponseWriter, r *http.Request) {
-    slog.Debug("DB API called: %s %s", r.Method, r.URL.Path)
+    slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
 
     user := getUsername(r)
     if user == "" {
         writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
         return
+    } else {
+        slog.Debug("Clearing preferences for user", "user", user)
     }
 
     // Parse JSON body
@@ -298,15 +300,19 @@ func (h *DbConfig) handleDeletePreferences(w http.ResponseWriter, r *http.Reques
         return
     }
 
+    slog.Debug("Clearing preference keys", "user", user, "keys", body.Keys)
+
     // Update DB to remove keys
-    _, err := h.db.ExecContext(
+    result, err := h.db.ExecContext(
         r.Context(),
         `UPDATE preferences
-         SET content = content - $2
+         SET content = content - $2::text[]
          WHERE username = $1`,
         user,
         pq.Array(body.Keys),
     )
+
+    slog.Debug("Clear preferences result", "result", result)
 
     if err != nil {
         slog.Error("Error clearing preferences", "err", err)
