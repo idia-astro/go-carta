@@ -211,22 +211,22 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 				})
 				return
 			}
-slog.Info("About to set PAM session cookie", "username", user.Username)
+			slog.Info("About to set PAM session cookie", "username", user.Username)
 
-    if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
-        slog.Error("Failed to set PAM session cookie", "username", user.Username, "error", err)
-        http.Error(w, "Session error", http.StatusInternalServerError)
-        return
-    }
+			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
+				slog.Error("Failed to set PAM session cookie", "username", user.Username, "error", err)
+				http.Error(w, "Session error", http.StatusInternalServerError)
+				return
+			}
 
-    // Dump Set-Cookie headers to confirm what we sent
-    for _, c := range w.Header()["Set-Cookie"] {
-        slog.Info("Set-Cookie", "value", c)
-    }
+			// Dump Set-Cookie headers to confirm what we sent
+			for _, c := range w.Header()["Set-Cookie"] {
+				slog.Info("Set-Cookie", "value", c)
+			}
 
-    slog.Info("Cookie set, redirecting", "to", "/")
-    http.Redirect(w, r, "/", http.StatusFound)
-			
+			slog.Info("Cookie set, redirecting", "to", "/")
+			http.Redirect(w, r, "/", http.StatusFound)
+
 			return
 
 		default:
