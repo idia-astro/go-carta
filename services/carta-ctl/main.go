@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
@@ -214,14 +212,15 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 				return
 			}
 
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("Handling PAM login request", "method", r.Method)
-
+    		// success
+			slog.Info("PAM login succeeded", "username", user.Username)
 			http.Redirect(w, r, "/", http.StatusFound)
+			return
 
 		default:
 			slog.Warn("Ignoring unsupported method", "method", r.Method)
 			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
 	})
 }
