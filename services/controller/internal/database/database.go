@@ -738,17 +738,5 @@ func (h *DbConfig) Router() http.Handler {
     mux.Handle("PUT /workspace", http.HandlerFunc(notImplemented))
     mux.Handle("DELETE /workspace", http.HandlerFunc(notImplemented))
 
-    mux.Handle("/", http.HandlerFunc(h.HttpHandler));
-
     return mux
-}
-
-
-
-func (h *DbConfig) HttpHandler(w http.ResponseWriter, r *http.Request) {
-    slog.Info("Received request for database handler: %s %s", r.Method, r.URL.Path)
-
-    w.Header().Set("Content-Type", "text/plain")
-    w.WriteHeader(http.StatusOK)
-    _, _ = w.Write([]byte("hello from the database world"))
 }
