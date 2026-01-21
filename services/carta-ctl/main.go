@@ -314,7 +314,6 @@ func main() {
 			p,
 			authoidc.New(cfg.Controller.OIDC),
 		)
-
 	default:
 		slog.Error("Unknown config option", "authMode", cfg.Controller.AuthMode)
 		os.Exit(1)
