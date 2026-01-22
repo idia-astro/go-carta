@@ -29,8 +29,7 @@ var schemaFiles embed.FS
 const PREFERENCE_SCHEMA_VERSION = 2
 const LAYOUT_SCHEMA_VERSION = 2
 const SNIPPET_SCHEMA_VERSION = 1
-
-//const WORKSPACE_SCHEMA_VERSION = 0;
+const WORKSPACE_SCHEMA_VERSION = 0;
 
 func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error) {
 	f, err := schemaFiles.Open(path)
@@ -212,7 +211,7 @@ func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		// Validate + apply defaults
+		// Validate
 		if err := h.PrefSchema.Validate(prefs); err != nil {
 			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Stored preferences failed validation: %v", err))
 			return
@@ -721,6 +720,68 @@ func (h *DbConfig) handleClearSnippet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *DbConfig) handleGetWorkspaceByKey(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		// No username means an error ... rather than unauthorized as `withAuth` should have caught this
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	}
+
+	key := r.PathValue("key");
+	if key == "" {
+		writeJSONResponse(w, http.StatusInternalServerError, "Missing key")
+		return
+	}
+
+	// Query DB
+	var raw json.RawMessage
+	err := h.db.GetContext(r.Context(), &raw,
+		`SELECT * FROM workspaces WHERE id = $1 AND username = $2`,
+		key,
+		user,
+	)
+	var workspace map[string]any
+
+	switch {
+	case err == sql.ErrNoRows:
+		slog.Debug("Workspace not found", "key", key)
+		writeJSONResponse(w, http.StatusNotFound, fmt.Sprintf("Workspace not found: %v", key))
+		return
+
+	case err != nil:
+		slog.Debug("Failed to query workspace", "key", key, "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to retrieve workspace: %v", key))
+		return
+
+	default:
+		// Decode JSONB from DB
+		if err := json.Unmarshal(raw, &workspace); err != nil {
+			slog.Debug("Failed to decode stored workspace", "key", key, "err", err)
+			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to decode stored workspace: %v", key))
+			return
+		}
+
+		// Validate
+		if err := h.PrefSchema.Validate(workspace); err != nil {
+			slog.Warn("Stored workspace failed validation", "key", key, "err", err)
+			// Proceed anyway
+		}
+	}
+
+	// Respond
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success":     true,
+		"workspace": workspace,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
 func (h *DbConfig) Router() http.Handler {
 	mux := http.NewServeMux()
 
@@ -739,7 +800,7 @@ func (h *DbConfig) Router() http.Handler {
 	mux.Handle("POST /share/workspace/{id}", http.HandlerFunc(notImplemented))
 
 	mux.Handle("GET /list/workspaces", http.HandlerFunc(notImplemented))
-	mux.Handle("GET /workspace/key/{key}", http.HandlerFunc(notImplemented))
+	mux.Handle("GET /workspace/key/{key}", http.HandlerFunc(h.handleGetWorkspaceByKey))
 	mux.Handle("GET /workspace/{name}", http.HandlerFunc(notImplemented))
 	mux.Handle("PUT /workspace", http.HandlerFunc(notImplemented))
 	mux.Handle("DELETE /workspace", http.HandlerFunc(notImplemented))
