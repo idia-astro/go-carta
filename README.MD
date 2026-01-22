@@ -79,7 +79,7 @@ Command line showing starting the Spawner which is used to start the carta_backe
 
 Once a spawner process is started, a CARTA Controller can be started. Below is a command line if PAM is being used for authentication.
 
-``$  ./build/carta-ctl  --spawner_address "http://localhost:8085" --frontend_dir /usr/share/carta/frontend/ --log_level "info" --auth_mode pam```
+```$  ./build/carta-ctl  --spawner_address "http://localhost:8085" --frontend_dir /usr/share/carta/frontend/ --log_level "info" --auth_mode pam```
 
 The CARTA Controller can also talk to an OIDC service such as Keycloak. In that case auth_mode is set to oidc and additional configuration is needed to set the OIDC service URL and the OIDC Secret needed to connect to this service. These values have to be set in the main configuration file rather from the command line.
 
