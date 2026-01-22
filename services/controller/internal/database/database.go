@@ -84,13 +84,6 @@ func (h *DbConfig) EnsureTables() error {
         content  JSONB NOT NULL,
         PRIMARY KEY (name, username)
     );
-
-    CREATE TABLE IF NOT EXISTS workspaces (
-        name     TEXT NOT NULL,
-        username TEXT NOT NULL,
-        content  JSONB NOT NULL,
-        PRIMARY KEY (name, username)
-    );
     `
 
 	if _, err := h.db.Exec(schema); err != nil {
