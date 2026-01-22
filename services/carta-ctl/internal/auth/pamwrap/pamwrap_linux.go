@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/CARTAvis/go-carta/pkg/config"
-	authpam "github.com/CARTAvis/go-carta/services/controller/internal/auth/pam"
+	authpam "github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth/pam"
 )
 
 func newImpl(cfg config.PAMConfig) (Authenticator, error) {

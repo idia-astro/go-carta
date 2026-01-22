@@ -1,4 +1,4 @@
-// services/controller/internal/auth/auth.go
+// services/carta-ctl/internal/auth/auth.go
 package auth
 
 import (

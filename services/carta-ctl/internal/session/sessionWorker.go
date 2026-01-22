@@ -9,7 +9,7 @@ import (
 
 	"github.com/CARTAvis/go-carta/pkg/cartaDefinitions"
 	helpers "github.com/CARTAvis/go-carta/pkg/shared"
-	"github.com/CARTAvis/go-carta/services/controller/internal/cartaHelpers"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/cartaHelpers"
 )
 
 type SessionWorker struct {

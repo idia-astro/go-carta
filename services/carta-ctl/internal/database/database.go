@@ -14,8 +14,8 @@ import (
 	"encoding/json"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
-	"github.com/CARTAvis/go-carta/services/controller/internal/session"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/session"
 )
 
 // Avoid needing to ship schema files separately

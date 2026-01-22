@@ -1,4 +1,4 @@
-// services/controller/internal/auth/oidc/oidc.go
+// services/carta-ctl/internal/auth/oidc/oidc.go
 package oidc
 
 import (
@@ -13,7 +13,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/CARTAvis/go-carta/pkg/config"
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
 )
 
 const sessionCookieName = "carta_oidc"

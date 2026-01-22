@@ -157,7 +157,6 @@ func Load(configPath string, overrideStr string) *Config {
 			os.Exit(1)
 		}
 	}
-
 	return &cfg
 }
 
