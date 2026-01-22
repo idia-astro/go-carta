@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
-	"html/template"
 	"strings"
-	"embed"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -18,11 +18,11 @@ import (
 
 	"github.com/CARTAvis/go-carta/pkg/config"
 	helpers "github.com/CARTAvis/go-carta/pkg/shared"
-	"github.com/CARTAvis/go-carta/services/controller/internal/session"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/session"
 
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
-	authoidc "github.com/CARTAvis/go-carta/services/controller/internal/auth/oidc"
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth/pamwrap"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
+	authoidc "github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth/oidc"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth/pamwrap"
 )
 
 var (
@@ -211,18 +211,28 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 				})
 				return
 			}
+			slog.Info("About to set PAM session cookie", "username", user.Username)
 
 			if err := pamwrap.SetSessionCookie(w, user.Username); err != nil {
-				slog.Error("Failed to set PAM session cookie", "username", username, "error", err)
+				slog.Error("Failed to set PAM session cookie", "username", user.Username, "error", err)
 				http.Error(w, "Session error", http.StatusInternalServerError)
 				return
 			}
 
+			// Dump Set-Cookie headers to confirm what we sent
+			for _, c := range w.Header()["Set-Cookie"] {
+				slog.Info("Set-Cookie", "value", c)
+			}
+
+			slog.Info("Cookie set, redirecting", "to", "/")
 			http.Redirect(w, r, "/", http.StatusFound)
+
+			return
 
 		default:
 			slog.Warn("Ignoring unsupported method", "method", r.Method)
 			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
 	})
 }
@@ -230,7 +240,7 @@ func pamLoginHandler(p pamwrap.Authenticator) http.Handler {
 var oidcAuth *authoidc.OIDCAuthenticator
 
 func main() {
-	logger := helpers.NewLogger("controller", "info")
+	logger := helpers.NewLogger("carta-ctl", "info")
 	slog.SetDefault(logger)
 
 	id := uuid.New()
@@ -248,6 +258,12 @@ func main() {
 
 	pflag.Parse()
 
+	slog.Info("Parsed flags",
+		"auth_mode", pflag.Lookup("auth_mode").Value.String(),
+		"override", pflag.Lookup("override").Value.String(),
+		"config", pflag.Lookup("config").Value.String(),
+	)
+
 	config.BindFlags(map[string]string{
 		"log_level":       "log_level",
 		"port":            "controller.port",
@@ -260,8 +276,11 @@ func main() {
 
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 
+	slog.Info("Cfg auth_mode", "authMode", cfg.Controller.AuthMode)
+	slog.Info("Cfg auth_mode", "cfg.Controller.AuthMode", cfg.Controller.AuthMode)
+
 	// Update the logger to use the configured log level
-	logger = helpers.NewLogger("controller", cfg.LogLevel)
+	logger = helpers.NewLogger("carta-ctl", cfg.LogLevel)
 	slog.SetDefault(logger)
 
 	pamLoginTmpl = template.Must(
@@ -307,9 +326,8 @@ func main() {
 			p,
 			authoidc.New(cfg.Controller.OIDC),
 		)
-
 	default:
-		slog.Error("Unknown config option", "authMod", cfg.Controller.AuthMode)
+		slog.Error("Unknown config option", "authMode", cfg.Controller.AuthMode)
 		os.Exit(1)
 	}
 	// Default baseFolder to $HOME if unset
