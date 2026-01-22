@@ -12,7 +12,7 @@ import (
 
 	pb "github.com/CARTAvis/go-carta/pkg/grpc"
 	utils "github.com/CARTAvis/go-carta/pkg/shared"
-	"github.com/CARTAvis/go-carta/services/worker/fitsWrapper"
+	"github.com/CARTAvis/go-carta/services/carta-worker/fitsWrapper"
 )
 
 var (
@@ -31,7 +31,7 @@ type fileListServer struct {
 func main() {
 	flag.Parse()
 
-	logger := utils.NewLogger("worker", "debug")
+	logger := utils.NewLogger("carta-worker", "debug")
 	slog.SetDefault(logger)
 
 	fitsWrapper.TestWrapper("/Users/angus/cubes/m422.fits")

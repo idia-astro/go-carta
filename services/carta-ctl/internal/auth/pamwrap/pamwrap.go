@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"log/slog"
 
 	"github.com/CARTAvis/go-carta/pkg/config"
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
 )
 
 var ErrUnsupported = errors.New("PAM auth is only supported on Linux")
@@ -22,5 +23,6 @@ func New(cfg config.PAMConfig) (Authenticator, error) {
 }
 
 func SetSessionCookie(w http.ResponseWriter, username string) error {
+	slog.Debug("Setting PAM session cookie")
 	return setSessionCookieImpl(w, username)
 }

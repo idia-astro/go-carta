@@ -9,9 +9,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/CARTAvis/go-carta/pkg/cartaDefinitions"
-	"github.com/CARTAvis/go-carta/services/controller/internal/auth"
-	"github.com/CARTAvis/go-carta/services/controller/internal/cartaHelpers"
-	"github.com/CARTAvis/go-carta/services/controller/internal/spawnerHelpers"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/cartaHelpers"
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/spawnerHelpers"
 )
 
 type contextKey string
