@@ -84,6 +84,19 @@ func (h *DbConfig) EnsureTables() error {
         content  JSONB NOT NULL,
         PRIMARY KEY (name, username)
     );
+
+	CREATE TABLE IF NOT EXISTS workspaces (
+    id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name     TEXT NOT NULL,
+    username TEXT NOT NULL,
+    content  JSONB NOT NULL,
+
+    -- Keep top-level 'id' out of the JSON content to avoid confusion
+    CONSTRAINT no_top_level_id CHECK (NOT (content ? 'id')),
+
+    -- Retain unique workspace names per user
+    CONSTRAINT unique_name_per_user UNIQUE (name, username)
+	);
     `
 
 	if _, err := h.db.Exec(schema); err != nil {
