@@ -44,7 +44,7 @@ func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error)
 
 	inst, err := jsonschema.UnmarshalJSON(f)
 	if err != nil {
-		slog.Error("UnmarshalJSON error", "err", err)
+		slog.Error("Error unmarshalling JSON", "err", err)
 	}
 	if err := c.AddResource("embed://"+path, inst); err != nil {
 		return nil, err
@@ -193,12 +193,7 @@ func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 
 	switch {
 	case err == sql.ErrNoRows:
-		// Defaults
-		prefs = map[string]any{"version": PREFERENCE_SCHEMA_VERSION}
-		if err := h.PrefSchema.Validate(prefs); err != nil {
-			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Default preferences validation failed: %v", err))
-			return
-		}
+		// No preferences stored yet, return empty
 
 	case err != nil:
 		writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to query preferences: %v", err))
@@ -207,14 +202,14 @@ func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 	default:
 		// Decode JSONB from DB
 		if err := json.Unmarshal(raw, &prefs); err != nil {
-			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to decode stored preferences: %v", err))
+			slog.Warn("Error unmarshalling JSON in stored preferences", "err", err)
+			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Malformed JSON in stored preferences: %v", err))
 			return
 		}
 
 		// Validate
 		if err := h.PrefSchema.Validate(prefs); err != nil {
-			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Stored preferences failed validation: %v", err))
-			return
+			slog.Warn("Stored preferences failed validation", "err", err)
 		}
 	}
 
@@ -257,7 +252,8 @@ func (h *DbConfig) handleSetPreferences(w http.ResponseWriter, r *http.Request) 
 	// Remarshal the preferences to ensure proper JSONB format
 	jsonBytes, err := json.Marshal(prefs)
 	if err != nil {
-		writeJSONResponse(w, http.StatusInternalServerError, "Failed to encode preferences as JSON")
+		slog.Error("Error marshalling preferences", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Error marshalling preferences")
 		return
 	}
 
@@ -377,7 +373,7 @@ func (h *DbConfig) handleGetLayouts(w http.ResponseWriter, r *http.Request) {
 		// Decode JSONB content
 		var layout any
 		if err := json.Unmarshal(raw, &layout); err != nil {
-			slog.Warn("Invalid JSON in stored layout", "name", name, "err", err)
+			slog.Warn("Error unmarshalling stored layout", "name", name, "err", err)
 			continue
 		}
 
@@ -444,7 +440,8 @@ func (h *DbConfig) handleSetLayout(w http.ResponseWriter, r *http.Request) {
 	// Marshal layout to JSONB
 	jsonBytes, err := json.Marshal(body.Layout)
 	if err != nil {
-		writeJSONResponse(w, http.StatusInternalServerError, "Failed to encode layout as JSON")
+		slog.Error("Error marshalling layout", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Error marshalling layout")
 		return
 	}
 
@@ -571,7 +568,7 @@ func (h *DbConfig) handleGetSnippets(w http.ResponseWriter, r *http.Request) {
 		// Decode JSONB content
 		var snippet any
 		if err := json.Unmarshal(raw, &snippet); err != nil {
-			slog.Warn("Invalid JSON in stored snippet", "name", name, "err", err)
+			slog.Warn("Error unmarshalling JSON in stored snippet", "name", name, "err", err)
 			continue
 		}
 
@@ -638,7 +635,8 @@ func (h *DbConfig) handleSetSnippet(w http.ResponseWriter, r *http.Request) {
 	// Marshal snippet to JSONB
 	jsonBytes, err := json.Marshal(body.Snippet)
 	if err != nil {
-		writeJSONResponse(w, http.StatusInternalServerError, "Failed to encode snippet as JSON")
+		slog.Error("Error marshalling snippet", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Error marshalling snippet")
 		return
 	}
 
