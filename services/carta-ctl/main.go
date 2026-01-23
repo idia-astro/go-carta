@@ -246,7 +246,7 @@ func main() {
 	id := uuid.New()
 	slog.Info("Starting controller", "uuid", id.String())
 
-	pflag.String("config", "", "Path to config file (default: ./config.toml)")
+	pflag.String("config", "", "Path to config file (default: /etc/carta/config.toml)")
 	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
 	pflag.Int("port", 8081, "TCP server port")
 	pflag.String("hostname", "", "Hostname to listen on")
