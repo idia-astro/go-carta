@@ -69,10 +69,32 @@ Compiled services are found in the `build` folder.
 
 ## Configure
 
-An [example configuration file](config.toml.example) is provided. By default, services look for configuration in `/etc/carta/config.toml`. You can specify a different location with a command line parameter.
+Common configuration options can be provided as optional parameters to service commands. Invoke the service with `--help` to see a list of available commands. The recommended way to configure persistent options is through a configuration file in [TOML format](https://toml.io). An annotated [example configuration file](config.toml.example) is provided. By default, services look for configuration in `/etc/carta/config.toml`.
+
+You can specify a different file location with a command line parameter:
 
 ```bash
-# From the project root
 ./build/carta-spawn --config=./config.toml
 ./build/carta-ctl --config=./config.toml
 ```
+
+Configuration options with string, integer or boolean values can also be overridden on the commandline with the `--override` parameter.
+
+### Configuring the controller
+
+#### Authentication mode
+
+The controller can use PAM for authentication, or communicate with an OIDC service such as Keycloak.
+
+### Configuring the spawner
+
+#### Worker executable
+
+A common initial use case for `go-carta` is as a replacement for the old CARTA controller: in this scenario, the spawner must be configured to use the CARTA backend executable to launch worker processes. This option may be set on the command line or in the configuration file (as in the example file).
+
+```bash
+./build/carta-spawn --worker_process=carta_backend
+```
+
+### Complete example
+
