@@ -66,3 +66,13 @@ Compiled services are found in the `build` folder.
 ./build/carta-spawn --worker_exec build/worker --port 8080
 ./build/carta-ctl --spawner_address http://localhost:8080 --port 8081
 ```
+
+## Configure
+
+An [example configuration file](config.toml.example) is provided. By default, services look for configuration in `/etc/carta/config.toml`. You can specify a different location with a command line parameter.
+
+```bash
+# From the project root
+./build/carta-spawn --config=./config.toml
+./build/carta-ctl --config=./config.toml
+```
