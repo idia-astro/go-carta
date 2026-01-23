@@ -3,8 +3,8 @@ package pamwrap
 import (
 	"context"
 	"errors"
-	"net/http"
 	"log/slog"
+	"net/http"
 
 	"github.com/CARTAvis/go-carta/pkg/config"
 	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
