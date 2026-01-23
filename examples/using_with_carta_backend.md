@@ -1,10 +1,10 @@
 ## Examples
-This section shows some command lines for running the carta-go code on an Ubuntu system.
+This file shows some command lines for running the carta-go code on an Ubuntu system.
 
 
 Command line showing starting the Spawner which is used to start the carta_backend processes at a site.
 
-```$ ./build/carta-spawn --port 8085 --worker_process "carta_backend"```
+```$ ./build/carta-spawn --port 8085 --worker_exec "carta_backend"```
 
 Once a spawner process is started, a CARTA Controller can be started. Below is a command line if PAM is being used for authentication.
 
@@ -33,7 +33,7 @@ client_secret = "IODC_SECRET"
 redirect_url = "http://localhost:8081/oidc/callback"
 
 # optional lists
-allowed_aud = ["YOUR_CLIENT_ID"]
+allowed_aud = ["carta-ctl"]
 allowed_groups = ["carta-users", "admins"]
 
 [controller.pam]
