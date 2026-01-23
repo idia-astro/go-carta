@@ -842,6 +842,93 @@ func (h *DbConfig) handleGetWorkspaceByName(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+func (h *DbConfig) handleSetWorkspace(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	} else {
+		slog.Debug("Setting workspace for user", "user", user)
+	}
+
+	// Parse JSON body
+	var body struct {
+		WorkspaceName string         `json:"workspaceName"`
+		Workspace     map[string]any `json:"workspace"`
+	}
+
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&body); err != nil {
+		writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+		return
+	}
+
+	version, ok := body.Workspace["workspaceVersion"].(float64)
+	if body.WorkspaceName == "" || body.Workspace == nil || !ok || int(version) != WORKSPACE_SCHEMA_VERSION {
+		writeJSONResponse(w, http.StatusBadRequest, "Malformed workspace update")
+		return
+	}
+
+	// Validate workspace
+	if err := h.WorkspaceSchema.Validate(body.Workspace); err != nil {
+		slog.Warn("Workspace validation failed", "name", body.WorkspaceName, "err", err)
+		writeJSONResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid workspace update: %v", err))
+		return
+	}
+
+	// Separate out ID if present
+	id, id_exists := body.Workspace["id"]
+	if id_exists {
+		delete(body.Workspace, "id")
+	}
+
+	// Marshal workspace to JSONB
+	jsonBytes, err := json.Marshal(body.Workspace)
+	if err != nil {
+		slog.Error("Error marshalling workspace", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Error marshalling workspace")
+		return
+	}
+
+	// UPSERT into Postgres
+	if id_exists {
+		slog.Error("Need to ensure that the workspace ID belongs to the user")
+		_, err = h.db.ExecContext(
+			r.Context(),
+			`INSERT INTO workspaces (id, name, username, content)
+			VALUES ($1, $2, $3, $4::jsonb)
+			ON CONFLICT (id)
+			DO UPDATE SET content = EXCLUDED.content`,
+			id, body.WorkspaceName, user, jsonBytes,
+		)
+	} else {
+		_, err = h.db.ExecContext(
+			r.Context(),
+			`INSERT INTO workspaces (name, username, content)
+			VALUES ($1, $2, $3::jsonb)
+			ON CONFLICT (name, username)
+			DO UPDATE SET content = EXCLUDED.content`,
+			body.WorkspaceName, user, jsonBytes,
+		)
+	}
+
+	if err != nil {
+		slog.Error("Failed to store workspace", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Failed to store workspace")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
 func (h *DbConfig) Router() http.Handler {
 	mux := http.NewServeMux()
 
@@ -862,7 +949,7 @@ func (h *DbConfig) Router() http.Handler {
 	mux.Handle("GET /list/workspaces", http.HandlerFunc(notImplemented))
 	mux.Handle("GET /workspace/key/{key}", http.HandlerFunc(h.handleGetWorkspaceByKey))
 	mux.Handle("GET /workspace/{name}", http.HandlerFunc(h.handleGetWorkspaceByName))
-	mux.Handle("PUT /workspace", http.HandlerFunc(notImplemented))
+	mux.Handle("PUT /workspace", http.HandlerFunc(h.handleSetWorkspace))
 	mux.Handle("DELETE /workspace", http.HandlerFunc(notImplemented))
 
 	return mux
