@@ -59,6 +59,7 @@ make help
 ```
 
 ## Run
+
 Compiled services are found in the `build` folder.
 
 ```bash
@@ -71,20 +72,44 @@ Compiled services are found in the `build` folder.
 
 Common configuration options can be provided as optional parameters to service commands. Invoke the service with `--help` to see a list of available commands. The recommended way to configure persistent options is through a configuration file in [TOML format](https://toml.io). An annotated [example configuration file](config.toml.example) is provided. By default, services look for configuration in `/etc/carta/config.toml`.
 
-You can specify a different file location with a command line parameter:
+You can specify a different file location with a command line parameter, for example:
 
 ```bash
 ./build/carta-spawn --config=./config.toml
-./build/carta-ctl --config=./config.toml
 ```
 
 Configuration options with string, integer or boolean values can also be overridden on the commandline with the `--override` parameter.
 
 ### Configuring the controller
 
-#### Authentication mode
+#### Authentication
 
-The controller can use PAM for authentication, or communicate with an OIDC service such as Keycloak.
+The `auth_mode` parameter is used to enable different authentication methods. For example, this command launches the controller with only PAM authentication enabled. A custom service name can be set in the configuration file.
+
+```bash
+./build/carta-ctl --auth_mode=pam
+```
+
+The controller can also be integrated with an OIDC service such as Keycloak. In this case, `auth_mode` must be set to `oidc`, and additional configuration is required to set properties such as the service URL and the secret. These options are not available as command line parameters, and must be set in the main configuration file. Here is an example of typical values:
+
+```toml
+[controller]
+auth_mode = "oidc"
+
+[controller.oidc]
+issuer_url = "http://localhost:8080/realms/carta"
+client_id = "carta-ctl"
+client_secret = "YOUR_OIDC_SECRET"
+redirect_url = "http://localhost:8081/oidc/callback"
+```
+
+#### Frontend directory
+
+To configure the controller to serve the frontend, you must provide a path to the root directory of a static frontend build:
+
+```bash
+./build/carta-ctl --frontend_dir=/usr/share/carta/frontend
+```
 
 ### Configuring the spawner
 
@@ -95,6 +120,3 @@ A common initial use case for `go-carta` is as a replacement for the old CARTA c
 ```bash
 ./build/carta-spawn --worker_process=carta_backend
 ```
-
-### Complete example
-
