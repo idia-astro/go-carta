@@ -18,8 +18,8 @@ import (
 
 	"github.com/CARTAvis/go-carta/pkg/config"
 	helpers "github.com/CARTAvis/go-carta/pkg/shared"
-	"github.com/CARTAvis/go-carta/services/spawner/internal/httpHelpers"
-	"github.com/CARTAvis/go-carta/services/spawner/internal/processHelpers"
+	"github.com/CARTAvis/go-carta/services/carta-spawn/internal/httpHelpers"
+	"github.com/CARTAvis/go-carta/services/carta-spawn/internal/processHelpers"
 )
 
 type WorkerInfo struct {
@@ -28,13 +28,13 @@ type WorkerInfo struct {
 }
 
 func main() {
-	logger := helpers.NewLogger("spawner", "info")
+	logger := helpers.NewLogger("carta-spawn", "info")
 	slog.SetDefault(logger)
 
 	id := uuid.New()
 	slog.Info("Starting spawner", "uuid", id.String())
 
-	pflag.String("config", "", "Path to config file (default: ./config.toml)")
+	pflag.String("config", "", "Path to config file (default: /etc/carta/config.toml)")
 	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
 	pflag.Int("port", 8080, "HTTP server port")
 	pflag.String("hostname", "", "Hostname to listen on")
@@ -55,7 +55,7 @@ func main() {
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
 
 	// Update the logger to use the configured log level
-	logger = helpers.NewLogger("spawner", cfg.LogLevel)
+	logger = helpers.NewLogger("carta-spawn", cfg.LogLevel)
 	slog.SetDefault(logger)
 
 	// Global context that cancels all spawned processes on SIGINT/SIGTERM
