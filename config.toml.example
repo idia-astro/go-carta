@@ -1,5 +1,5 @@
 # CARTA Go Configuration Example
-# Copy this file to config.toml and adjust values as needed
+# Copy this file to /etc/carta/config.toml and adjust values as needed
 # Configuration can also be set via environment variables with CARTA_ prefix
 # Example: CARTA_CONTROLLER_PORT=8081
 

@@ -102,7 +102,7 @@ func ConfigureViper() {
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.SetConfigName("config")
-	viper.AddConfigPath(".")
+	viper.AddConfigPath("/etc/carta")
 }
 
 func init() {
