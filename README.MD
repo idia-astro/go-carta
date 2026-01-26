@@ -118,5 +118,5 @@ To configure the controller to serve the frontend, you must provide a path to th
 A common initial use case for `go-carta` is as a replacement for the old CARTA controller: in this scenario, the spawner must be configured to use the CARTA backend executable to launch worker processes. This option may be set on the command line or in the configuration file (as in the example file).
 
 ```bash
-./build/carta-spawn --worker_process=carta_backend
+./build/carta-spawn --worker_exec=carta_backend
 ```
