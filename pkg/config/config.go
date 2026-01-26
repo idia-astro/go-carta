@@ -47,10 +47,10 @@ type ControllerConfig struct {
 }
 
 type SpawnerConfig struct {
-	WorkerProcess string        `mapstructure:"worker_process"`
-	Timeout       time.Duration `mapstructure:"timeout"`
-	Port          int           `mapstructure:"port"`
-	Hostname      string        `mapstructure:"hostname"`
+	WorkerExec string        `mapstructure:"worker_exec"`
+	Timeout    time.Duration `mapstructure:"timeout"`
+	Port       int           `mapstructure:"port"`
+	Hostname   string        `mapstructure:"hostname"`
 }
 
 // Config holds common configuration values shared across all services
@@ -79,7 +79,7 @@ func setControllerDefaults(v *viper.Viper) {
 }
 
 func setSpawnerDefaults(v *viper.Viper) {
-	v.SetDefault("spawner.worker_process", "carta-worker")
+	v.SetDefault("spawner.worker_exec", "carta-worker")
 	v.SetDefault("spawner.timeout", 5*time.Second)
 	v.SetDefault("spawner.port", 8080)
 	v.SetDefault("spawner.hostname", "")
