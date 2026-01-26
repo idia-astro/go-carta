@@ -94,7 +94,7 @@ func (h *DbConfig) EnsureTables() error {
     CONSTRAINT no_top_level_id CHECK (NOT (content ? 'id')),
 
 	-- But ensure it remains unique giving the sharing possibility
-	CONSTRAINT unique_workspace_id UNIQUE (id)
+	CONSTRAINT unique_workspace_id UNIQUE (id),
 
 	PRIMARY KEY (username, name)
 	);
@@ -951,7 +951,7 @@ func (h *DbConfig) handleListWorkspaces(w http.ResponseWriter, r *http.Request) 
 	// Query DB
 	rows, err := h.db.QueryxContext(
 		r.Context(),
-		`SELECT name, id, content->>date AS date FROM workspaces WHERE username = $1`,
+		`SELECT name, id, content->>'date' AS date FROM workspaces WHERE username = $1`,
 		user,
 	)
 	if err != nil {
