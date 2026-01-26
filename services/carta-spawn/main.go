@@ -38,18 +38,18 @@ func main() {
 	pflag.String("log_level", "info", "Log level (debug|info|warn|error)")
 	pflag.Int("port", 8080, "HTTP server port")
 	pflag.String("hostname", "", "Hostname to listen on")
-	pflag.String("worker_process", "carta_backend", "Path to worker binary")
+	pflag.String("worker_exec", "carta_backend", "Path to worker executable")
 	pflag.Int("timeout", 5, "Spawn timeout in seconds")
 	pflag.String("override", "", "Override simple config values (string, int, bool) as comma-separated key:value pairs (e.g., spawner.port:9000,log_level:debug)")
 
 	pflag.Parse()
 
 	config.BindFlags(map[string]string{
-		"log_level":      "log_level",
-		"port":           "spawner.port",
-		"hostname":       "spawner.hostname",
-		"worker_process": "spawner.worker_process",
-		"timeout":        "spawner.timeout",
+		"log_level":   "log_level",
+		"port":        "spawner.port",
+		"hostname":    "spawner.hostname",
+		"worker_exec": "spawner.worker_exec",
+		"timeout":     "spawner.timeout",
 	})
 
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
@@ -82,7 +82,7 @@ func main() {
 
 		slog.Info("Process started", "baseFolder", reqBody.BaseFolder)
 
-		cmd, port, err := processHelpers.SpawnWorker(ctx, cfg.Spawner.WorkerProcess, cfg.Spawner.Timeout, reqBody.BaseFolder)
+		cmd, port, err := processHelpers.SpawnWorker(ctx, cfg.Spawner.WorkerExec, cfg.Spawner.Timeout, reqBody.BaseFolder)
 		spawnerDuration := time.Since(startTime)
 		if err != nil {
 			slog.Error("Error spawning worker on free port", "error", err)

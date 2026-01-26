@@ -72,8 +72,8 @@ redirect_url = ""
 # ============================================================================
 [spawner]
 
-# Path or command to the CARTA backend binary
-worker_process = "carta_backend"
+# Path or command to the CARTA backend executable
+worker_exec = "carta_backend"
 
 # Timeout duration for spawning worker processes
 timeout = "5s"

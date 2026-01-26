@@ -64,7 +64,7 @@ Compiled services are found in the `build` folder.
 
 ```bash
 # From the project root
-./build/carta-spawn --worker_process build/worker --port 8080
+./build/carta-spawn --worker_exec build/worker --port 8080
 ./build/carta-ctl --spawner_address http://localhost:8080 --port 8081
 ```
 
