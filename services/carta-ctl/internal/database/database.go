@@ -96,8 +96,11 @@ func (h *DbConfig) EnsureTables() error {
 	-- But ensure it remains unique giving the sharing possibility
 	CONSTRAINT unique_workspace_id UNIQUE (id)
 
-	PRIMARY KEY (name, username)
+	PRIMARY KEY (username, name)
 	);
+
+	CREATE INDEX IF NOT EXISTS idx_workspaces_username
+    ON workspaces (username);
     `
 
 	if _, err := h.db.Exec(schema); err != nil {
@@ -935,6 +938,82 @@ func (h *DbConfig) handleSetWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *DbConfig) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		// No username means an error ... rather than unauthorized as `withAuth` should have caught this
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	}
+
+	// Query DB
+	rows, err := h.db.QueryxContext(
+		r.Context(),
+		`SELECT name, id, content->>date AS date FROM workspaces WHERE username = $1`,
+		user,
+	)
+	if err != nil {
+		slog.Debug("Failed to query workspaces", "username", user, "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Failed to retrieve workspaces")
+		return
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Warn("error closing rows", "err", err)
+		}
+	}()
+
+	workspaces := make(map[string]any)
+
+	for rows.Next() {
+		var (
+			name string
+			id   string
+			date sql.NullString
+		)
+
+		if err := rows.Scan(&name, &id, &date); err != nil {
+			slog.Error("Error scanning workspace row", "err", err)
+			continue
+		}
+
+		if date.Valid {
+			workspaces[name] = map[string]any{
+				"_id":  id,
+				"id":   id,
+				"date": date.String,
+				"name": name,
+				"workspace": map[string]any{
+					"date": date.String,
+				},
+			}
+		} else {
+			workspaces[name] = map[string]any{
+				"_id":  id,
+				"id":   id,
+				"name": name,
+			}
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Row iteration error", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Failed to read workspaces")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success":    true,
+		"workspaces": workspaces,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
 func (h *DbConfig) Router() http.Handler {
 	mux := http.NewServeMux()
 
@@ -952,7 +1031,7 @@ func (h *DbConfig) Router() http.Handler {
 
 	mux.Handle("POST /share/workspace/{id}", http.HandlerFunc(notImplemented))
 
-	mux.Handle("GET /list/workspaces", http.HandlerFunc(notImplemented))
+	mux.Handle("GET /list/workspaces", http.HandlerFunc(h.handleListWorkspaces))
 	mux.Handle("GET /workspace/key/{key}", http.HandlerFunc(h.handleGetWorkspaceByKey))
 	mux.Handle("GET /workspace/{name}", http.HandlerFunc(h.handleGetWorkspaceByName))
 	mux.Handle("PUT /workspace", http.HandlerFunc(h.handleSetWorkspace))
