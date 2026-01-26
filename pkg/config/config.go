@@ -36,14 +36,15 @@ type PAMConfig struct {
 }
 
 type ControllerConfig struct {
-	OIDC           OIDCConfig `mapstructure:"oidc"`
-	PAM            PAMConfig  `mapstructure:"pam"`
-	Port           int        `mapstructure:"port"`
-	Hostname       string     `mapstructure:"hostname"`
-	FrontendDir    string     `mapstructure:"frontend_dir"`
-	SpawnerAddress string     `mapstructure:"spawner_address"`
-	BaseFolder     string     `mapstructure:"base_folder"`
-	AuthMode       AuthMode   `mapstructure:"auth_mode"`
+	OIDC               OIDCConfig `mapstructure:"oidc"`
+	PAM                PAMConfig  `mapstructure:"pam"`
+	Port               int        `mapstructure:"port"`
+	Hostname           string     `mapstructure:"hostname"`
+	FrontendDir        string     `mapstructure:"frontend_dir"`
+	SpawnerAddress     string     `mapstructure:"spawner_address"`
+	BaseFolder         string     `mapstructure:"base_folder"`
+	AuthMode           AuthMode   `mapstructure:"auth_mode"`
+	DBConnectionString string     `mapstructure:"db_conn_string"`
 }
 
 type SpawnerConfig struct {
@@ -76,6 +77,7 @@ func setControllerDefaults(v *viper.Viper) {
 	v.SetDefault("controller.oidc.client_id", "")
 	v.SetDefault("controller.oidc.client_secret", "")
 	v.SetDefault("controller.oidc.redirect_url", "")
+	v.SetDefault("controller.db_conn_string", "")
 }
 
 func setSpawnerDefaults(v *viper.Viper) {

@@ -1,3 +1,6 @@
 [submodule "proto/carta-protobuf"]
 	path = proto/carta-protobuf
 	url = https://github.com/CARTAvis/carta-protobuf
+[submodule "services/carta-ctl/internal/database/schemas"]
+	path = services/carta-ctl/internal/database/schemas
+	url = https://github.com/cartavis/schemas

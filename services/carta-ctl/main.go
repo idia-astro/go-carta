@@ -23,6 +23,10 @@ import (
 	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth"
 	authoidc "github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth/oidc"
 	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/auth/pamwrap"
+
+	"github.com/CARTAvis/go-carta/services/carta-ctl/internal/database"
+
+	"encoding/json"
 )
 
 var (
@@ -155,6 +159,16 @@ func withAuth(a auth.Authenticator, next http.Handler) http.Handler {
 	})
 }
 
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		w.Header().Set("Surrogate-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
 //go:embed templates/*.html
 var templates embed.FS
 var pamLoginTmpl *template.Template
@@ -255,6 +269,7 @@ func main() {
 	pflag.String("frontend_dir", "", "Directory with carta_frontend")
 	pflag.String("auth_mode", "none", "Authentication mode: none|pam|oidc|both")
 	pflag.String("override", "", "Override simple config values (string, int, bool) as comma-separated key:value pairs (e.g., controller.port:9000,log_level:debug)")
+	pflag.String("db_conn_string", "", "Database connection string")
 
 	pflag.Parse()
 
@@ -272,6 +287,7 @@ func main() {
 		"base_folder":     "controller.base_folder",
 		"frontend_dir":    "controller.frontend_dir",
 		"auth_mode":       "controller.auth_mode",
+		"db_conn_string":  "controller.db_conn_string",
 	})
 
 	cfg := config.Load(pflag.Lookup("config").Value.String(), pflag.Lookup("override").Value.String())
@@ -330,6 +346,7 @@ func main() {
 		slog.Error("Unknown config option", "authMode", cfg.Controller.AuthMode)
 		os.Exit(1)
 	}
+
 	// Default baseFolder to $HOME if unset
 	if len(strings.TrimSpace(cfg.Controller.BaseFolder)) == 0 {
 		dirname, err := os.UserHomeDir()
@@ -338,6 +355,21 @@ func main() {
 		}
 		cfg.Controller.BaseFolder = dirname
 		slog.Debug("Using default base folder", "dirname", dirname)
+	}
+
+	if cfg.Controller.DBConnectionString != "" {
+		slog.Debug("Database connection string provided", "db_conn_string", cfg.Controller.DBConnectionString)
+		db := database.DbConfig{
+			ConnString: cfg.Controller.DBConnectionString,
+		}
+		db.InitDb()
+		http.Handle(
+			"/api/database/",
+			noCache(
+				withAuth(authenticator,
+					http.StripPrefix("/api/database", http.Handler(db.Router())))))
+	} else {
+		slog.Debug("Defaulting to backend's filesystem-based state-saving")
 	}
 
 	// If a frontend directory is provided, serve carta_frontend from there
@@ -373,6 +405,25 @@ func main() {
 	} else {
 		slog.Info("No --frontendDir supplied: controller will *not* serve the frontend (only /carta WebSocket).")
 	}
+
+	cfgHandler := func(w http.ResponseWriter, r *http.Request) {
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		cfg := map[string]string{
+			"dashboardAddress": "/dashboard", // no dashboard ... causes redirect
+			"apiAddress":       "/api",
+			//"tokenRefreshAddress":  "/api/auth/refresh",
+			"logoutAddress": "/api/auth/logout",
+			"authPath":      "/api/auth/refresh",
+		}
+
+		if err := json.NewEncoder(w).Encode(cfg); err != nil {
+			slog.Error("Error encoding config", "err", err)
+		}
+	}
+	http.Handle("/config", http.HandlerFunc(cfgHandler))
 
 	addr := fmt.Sprintf("%s:%d", cfg.Controller.Hostname, cfg.Controller.Port)
 
