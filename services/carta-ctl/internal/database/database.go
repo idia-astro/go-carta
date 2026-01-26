@@ -29,8 +29,7 @@ var schemaFiles embed.FS
 const PREFERENCE_SCHEMA_VERSION = 2
 const LAYOUT_SCHEMA_VERSION = 2
 const SNIPPET_SCHEMA_VERSION = 1
-
-//const WORKSPACE_SCHEMA_VERSION = 0;
+const WORKSPACE_SCHEMA_VERSION = 0
 
 func loadSchema(c *jsonschema.Compiler, path string) (*jsonschema.Schema, error) {
 	f, err := schemaFiles.Open(path)
@@ -84,6 +83,24 @@ func (h *DbConfig) EnsureTables() error {
         content  JSONB NOT NULL,
         PRIMARY KEY (name, username)
     );
+
+	CREATE TABLE IF NOT EXISTS workspaces (
+    name     TEXT NOT NULL,
+    username TEXT NOT NULL,
+    id       UUID DEFAULT gen_random_uuid(),
+    content  JSONB NOT NULL,
+
+    -- Keep top-level 'id' out of the JSON content to avoid confusion
+    CONSTRAINT no_top_level_id CHECK (NOT (content ? 'id')),
+
+	-- But ensure it remains unique giving the sharing possibility
+	CONSTRAINT unique_workspace_id UNIQUE (id),
+
+	PRIMARY KEY (username, name)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_workspaces_username
+    ON workspaces (username);
     `
 
 	if _, err := h.db.Exec(schema); err != nil {
@@ -707,6 +724,355 @@ func (h *DbConfig) handleClearSnippet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *DbConfig) handleGetWorkspaceByKey(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		// No username means an error ... rather than unauthorized as `withAuth` should have caught this
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	}
+
+	key := r.PathValue("key")
+	if key == "" {
+		writeJSONResponse(w, http.StatusInternalServerError, "Missing key")
+		return
+	}
+
+	// Query DB
+	var raw json.RawMessage
+	err := h.db.GetContext(r.Context(), &raw,
+		`SELECT * FROM workspaces WHERE id = $1 AND username = $2`,
+		key,
+		user,
+	)
+	var workspace map[string]any
+
+	switch {
+	case err == sql.ErrNoRows:
+		slog.Debug("Workspace not found", "key", key)
+		writeJSONResponse(w, http.StatusNotFound, fmt.Sprintf("Workspace not found: %v", key))
+		return
+
+	case err != nil:
+		slog.Debug("Failed to query workspace", "key", key, "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to retrieve workspace: %v", key))
+		return
+
+	default:
+		// Decode JSONB from DB
+		if err := json.Unmarshal(raw, &workspace); err != nil {
+			slog.Debug("Failed to decode stored workspace", "key", key, "err", err)
+			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to decode stored workspace: %v", key))
+			return
+		}
+
+		// Validate
+		if err := h.PrefSchema.Validate(workspace); err != nil {
+			slog.Warn("Stored workspace failed validation", "key", key, "err", err)
+			// Proceed anyway
+		}
+	}
+
+	// Respond
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success":   true,
+		"workspace": workspace,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
+func (h *DbConfig) handleGetWorkspaceByName(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		// No username means an error ... rather than unauthorized as `withAuth` should have caught this
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	}
+
+	name := r.PathValue("name")
+	if name == "" {
+		writeJSONResponse(w, http.StatusInternalServerError, "Missing name")
+		return
+	}
+
+	// Query DB
+	var row struct {
+		ID      string          `db:"id"`
+		Content json.RawMessage `db:"content"`
+	}
+	err := h.db.GetContext(r.Context(), &row,
+		`SELECT content FROM workspaces WHERE name = $1 AND username = $2`,
+		name,
+		user,
+	)
+	var workspace map[string]any
+
+	switch {
+	case err == sql.ErrNoRows:
+		slog.Debug("Workspace not found", "name", name, "username", user)
+		writeJSONResponse(w, http.StatusNotFound, fmt.Sprintf("Workspace not found: %v", name))
+		return
+
+	case err != nil:
+		slog.Debug("Failed to query workspace", "name", name, "username", user, "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to retrieve workspace: %v", name))
+		return
+
+	default:
+		// Decode JSONB from DB
+		if err := json.Unmarshal(row.Content, &workspace); err != nil {
+			slog.Debug("Failed to decode stored workspace", "name", name, "username", user, "err", err)
+			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to decode stored workspace: %v", name))
+			return
+		}
+
+		workspace["id"] = row.ID
+
+		// Validate
+		if err := h.PrefSchema.Validate(workspace); err != nil {
+			slog.Warn("Stored workspace failed validation", "name", name, "username", user, "err", err)
+			// Proceed anyway
+		}
+	}
+
+	// Respond
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success":   true,
+		"workspace": workspace,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
+func (h *DbConfig) handleSetWorkspace(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	} else {
+		slog.Debug("Setting workspace for user", "user", user)
+	}
+
+	// Parse JSON body
+	var body struct {
+		WorkspaceName string         `json:"workspaceName"`
+		Workspace     map[string]any `json:"workspace"`
+	}
+
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&body); err != nil {
+		writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+		return
+	}
+
+	version, ok := body.Workspace["workspaceVersion"].(float64)
+	if body.WorkspaceName == "" || body.Workspace == nil || !ok || int(version) != WORKSPACE_SCHEMA_VERSION {
+		writeJSONResponse(w, http.StatusBadRequest, "Malformed workspace update")
+		return
+	}
+
+	// Validate workspace
+	if err := h.WorkspaceSchema.Validate(body.Workspace); err != nil {
+		slog.Warn("Workspace validation failed", "name", body.WorkspaceName, "err", err)
+		writeJSONResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid workspace update: %v", err))
+		return
+	}
+
+	// Separate out ID if present
+	id, id_exists := body.Workspace["id"]
+	if id_exists {
+		delete(body.Workspace, "id")
+	}
+
+	// Marshal workspace to JSONB
+	jsonBytes, err := json.Marshal(body.Workspace)
+	if err != nil {
+		slog.Error("Error marshalling workspace", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Error marshalling workspace")
+		return
+	}
+
+	// UPSERT into Postgres
+	if id_exists {
+		_, err = h.db.ExecContext(
+			r.Context(),
+			`INSERT INTO workspaces (name, username, id, content)
+			VALUES ($1, $2, $3, $4::jsonb)
+			ON CONFLICT (name, username)
+			DO UPDATE SET content = EXCLUDED.content, id = EXCLUDED.id`,
+			body.WorkspaceName, user, id, jsonBytes,
+		)
+	} else {
+		err = h.db.QueryRowContext(
+			r.Context(),
+			`INSERT INTO workspaces (name, username, content)
+			VALUES ($1, $2, $3::jsonb)
+			ON CONFLICT (name, username)
+			DO UPDATE SET content = EXCLUDED.content
+			RETURNING id`,
+			body.WorkspaceName, user, jsonBytes,
+		).Scan(&id)
+	}
+
+	if err != nil {
+		slog.Error("Failed to store workspace", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to store workspace: %v", err))
+		return
+	}
+
+	body.Workspace["id"] = id
+	body.Workspace["editable"] = true
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success":   true,
+		"workspace": body.Workspace,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
+func (h *DbConfig) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		// No username means an error ... rather than unauthorized as `withAuth` should have caught this
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	}
+
+	// Query DB
+	rows, err := h.db.QueryxContext(
+		r.Context(),
+		`SELECT name, id, content->>'date' AS date FROM workspaces WHERE username = $1`,
+		user,
+	)
+	if err != nil {
+		slog.Debug("Failed to query workspaces", "username", user, "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Failed to retrieve workspaces")
+		return
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Warn("error closing rows", "err", err)
+		}
+	}()
+
+	workspaces := make([]map[string]any, 0)
+
+	for rows.Next() {
+		var (
+			name string
+			id   string
+			date sql.NullString
+		)
+
+		if err := rows.Scan(&name, &id, &date); err != nil {
+			slog.Error("Error scanning workspace row", "err", err)
+			continue
+		}
+
+		if date.Valid {
+			workspaces = append(workspaces, map[string]any{
+				"_id":  id,
+				"id":   id,
+				"date": date.String,
+				"name": name,
+				"workspace": map[string]any{
+					"date": date.String,
+				},
+			})
+		} else {
+			workspaces = append(workspaces, map[string]any{
+				"_id":  id,
+				"id":   id,
+				"name": name,
+			})
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Row iteration error", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Failed to read workspaces")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success":    true,
+		"workspaces": workspaces,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
+func (h *DbConfig) handleClearWorkspace(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	} else {
+		slog.Debug("Clearing workspace for user", "user", user)
+	}
+
+	// Parse JSON body
+	// deletion by workspace ID is listed as TBD in the typescript controller
+	var body struct {
+		WorkspaceName string `json:"workspaceName"`
+	}
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&body); err != nil {
+		writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+		return
+	}
+	// Validate workspace name
+	if body.WorkspaceName == "" {
+		slog.Debug("Malformed workspace name received for clearing workspace")
+		writeJSONResponse(w, http.StatusBadRequest, "Malformed workspace name")
+		return
+	}
+
+	slog.Debug("Clearing workspace", "user", user, "workspaceName", body.WorkspaceName)
+
+	// Update DB to remove workspace
+	_, err := h.db.ExecContext(
+		r.Context(),
+		`DELETE FROM workspaces
+         WHERE name = $2 AND username = $1`,
+		user,
+		body.WorkspaceName,
+	)
+
+	if err != nil {
+		slog.Error("Error removing workspace", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Problem removing workspace")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
 func (h *DbConfig) Router() http.Handler {
 	mux := http.NewServeMux()
 
@@ -724,11 +1090,11 @@ func (h *DbConfig) Router() http.Handler {
 
 	mux.Handle("POST /share/workspace/{id}", http.HandlerFunc(notImplemented))
 
-	mux.Handle("GET /list/workspaces", http.HandlerFunc(notImplemented))
-	mux.Handle("GET /workspace/key/{key}", http.HandlerFunc(notImplemented))
-	mux.Handle("GET /workspace/{name}", http.HandlerFunc(notImplemented))
-	mux.Handle("PUT /workspace", http.HandlerFunc(notImplemented))
-	mux.Handle("DELETE /workspace", http.HandlerFunc(notImplemented))
+	mux.Handle("GET /list/workspaces", http.HandlerFunc(h.handleListWorkspaces))
+	mux.Handle("GET /workspace/key/{key}", http.HandlerFunc(h.handleGetWorkspaceByKey))
+	mux.Handle("GET /workspace/{name}", http.HandlerFunc(h.handleGetWorkspaceByName))
+	mux.Handle("PUT /workspace", http.HandlerFunc(h.handleSetWorkspace))
+	mux.Handle("DELETE /workspace", http.HandlerFunc(h.handleClearWorkspace))
 
 	return mux
 }
