@@ -1019,6 +1019,60 @@ func (h *DbConfig) handleListWorkspaces(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+func (h *DbConfig) handleClearWorkspace(w http.ResponseWriter, r *http.Request) {
+	slog.Debug(fmt.Sprintf("DB API called: %s %s", r.Method, r.URL.Path))
+
+	user := getUsername(r)
+	if user == "" {
+		writeJSONResponse(w, http.StatusInternalServerError, "Username not found, but passed authorization")
+		return
+	} else {
+		slog.Debug("Clearing workspace for user", "user", user)
+	}
+
+	// Parse JSON body
+	// deletion by workspace ID is listed as TBD in the typescript controller
+	var body struct {
+		WorkspaceName string `json:"workspaceName"`
+	}
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&body); err != nil {
+		writeJSONResponse(w, http.StatusBadRequest, "Malformed JSON body")
+		return
+	}
+	// Validate workspace name
+	if body.WorkspaceName == "" {
+		slog.Debug("Malformed workspace name received for clearing workspace")
+		writeJSONResponse(w, http.StatusBadRequest, "Malformed workspace name")
+		return
+	}
+
+	slog.Debug("Clearing workspace", "user", user, "workspaceName", body.WorkspaceName)
+
+	// Update DB to remove workspace
+	_, err := h.db.ExecContext(
+		r.Context(),
+		`DELETE FROM workspaces
+         WHERE name = $2 AND username = $1`,
+		user,
+		body.WorkspaceName,
+	)
+
+	if err != nil {
+		slog.Error("Error removing workspace", "err", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Problem removing workspace")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+	}); err != nil {
+		slog.Error("Error encoding JSON response", "err", err)
+	}
+}
+
 func (h *DbConfig) Router() http.Handler {
 	mux := http.NewServeMux()
 
@@ -1040,7 +1094,7 @@ func (h *DbConfig) Router() http.Handler {
 	mux.Handle("GET /workspace/key/{key}", http.HandlerFunc(h.handleGetWorkspaceByKey))
 	mux.Handle("GET /workspace/{name}", http.HandlerFunc(h.handleGetWorkspaceByName))
 	mux.Handle("PUT /workspace", http.HandlerFunc(h.handleSetWorkspace))
-	mux.Handle("DELETE /workspace", http.HandlerFunc(notImplemented))
+	mux.Handle("DELETE /workspace", http.HandlerFunc(h.handleClearWorkspace))
 
 	return mux
 }
