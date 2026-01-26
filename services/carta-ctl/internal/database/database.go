@@ -803,9 +803,12 @@ func (h *DbConfig) handleGetWorkspaceByName(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Query DB
-	var raw json.RawMessage
-	err := h.db.GetContext(r.Context(), &raw,
-		`SELECT * FROM workspaces WHERE name = $1 AND username = $2`,
+	var row struct {
+		ID      string          `db:"id"`
+		Content json.RawMessage `db:"content"`
+	}
+	err := h.db.GetContext(r.Context(), &row,
+		`SELECT content FROM workspaces WHERE name = $1 AND username = $2`,
 		name,
 		user,
 	)
@@ -824,11 +827,13 @@ func (h *DbConfig) handleGetWorkspaceByName(w http.ResponseWriter, r *http.Reque
 
 	default:
 		// Decode JSONB from DB
-		if err := json.Unmarshal(raw, &workspace); err != nil {
+		if err := json.Unmarshal(row.Content, &workspace); err != nil {
 			slog.Debug("Failed to decode stored workspace", "name", name, "username", user, "err", err)
 			writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to decode stored workspace: %v", name))
 			return
 		}
+
+		workspace["id"] = row.ID
 
 		// Validate
 		if err := h.PrefSchema.Validate(workspace); err != nil {
@@ -965,7 +970,7 @@ func (h *DbConfig) handleListWorkspaces(w http.ResponseWriter, r *http.Request) 
 		}
 	}()
 
-	workspaces := make(map[string]any)
+	workspaces := make([]map[string]any, 0)
 
 	for rows.Next() {
 		var (
@@ -980,7 +985,7 @@ func (h *DbConfig) handleListWorkspaces(w http.ResponseWriter, r *http.Request) 
 		}
 
 		if date.Valid {
-			workspaces[name] = map[string]any{
+			workspaces = append(workspaces, map[string]any{
 				"_id":  id,
 				"id":   id,
 				"date": date.String,
@@ -988,13 +993,13 @@ func (h *DbConfig) handleListWorkspaces(w http.ResponseWriter, r *http.Request) 
 				"workspace": map[string]any{
 					"date": date.String,
 				},
-			}
+			})
 		} else {
-			workspaces[name] = map[string]any{
+			workspaces = append(workspaces, map[string]any{
 				"_id":  id,
 				"id":   id,
 				"name": name,
-			}
+			})
 		}
 	}
 
