@@ -85,16 +85,18 @@ func (h *DbConfig) EnsureTables() error {
     );
 
 	CREATE TABLE IF NOT EXISTS workspaces (
-    id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name     TEXT NOT NULL,
     username TEXT NOT NULL,
+    id       UUID DEFAULT gen_random_uuid(),
     content  JSONB NOT NULL,
 
     -- Keep top-level 'id' out of the JSON content to avoid confusion
     CONSTRAINT no_top_level_id CHECK (NOT (content ? 'id')),
 
-    -- Retain unique workspace names per user
-    CONSTRAINT unique_name_per_user UNIQUE (name, username)
+	-- But ensure it remains unique giving the sharing possibility
+	CONSTRAINT unique_workspace_id UNIQUE (id)
+
+	PRIMARY KEY (name, username)
 	);
     `
 
@@ -895,14 +897,13 @@ func (h *DbConfig) handleSetWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	// UPSERT into Postgres
 	if id_exists {
-		slog.Error("Need to ensure that the workspace ID belongs to the user")
 		_, err = h.db.ExecContext(
 			r.Context(),
-			`INSERT INTO workspaces (id, name, username, content)
+			`INSERT INTO workspaces (name, username, id, content)
 			VALUES ($1, $2, $3, $4::jsonb)
-			ON CONFLICT (id)
-			DO UPDATE SET content = EXCLUDED.content`,
-			id, body.WorkspaceName, user, jsonBytes,
+			ON CONFLICT (name, username)
+			DO UPDATE SET content = EXCLUDED.content, id = EXCLUDED.id`,
+			body.WorkspaceName, user, id, jsonBytes,
 		)
 	} else {
 		_, err = h.db.ExecContext(
@@ -910,21 +911,25 @@ func (h *DbConfig) handleSetWorkspace(w http.ResponseWriter, r *http.Request) {
 			`INSERT INTO workspaces (name, username, content)
 			VALUES ($1, $2, $3::jsonb)
 			ON CONFLICT (name, username)
-			DO UPDATE SET content = EXCLUDED.content`,
+			DO UPDATE SET content = EXCLUDED.content
+			RETURNING id`,
 			body.WorkspaceName, user, jsonBytes,
-		)
+		).Scan(&id)
 	}
 
 	if err != nil {
 		slog.Error("Failed to store workspace", "err", err)
-		writeJSONResponse(w, http.StatusInternalServerError, "Failed to store workspace")
+		writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to store workspace: %v", err))
 		return
 	}
 
+	workspace["id"] = id
+	workspace["editable"] = true
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
+		"workspace": workspace,
 	}); err != nil {
 		slog.Error("Error encoding JSON response", "err", err)
 	}
