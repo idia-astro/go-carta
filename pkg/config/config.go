@@ -101,8 +101,7 @@ func ConfigureViper() {
 	viper.SetEnvPrefix("CARTA")
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetConfigName("config")
-	viper.AddConfigPath("/etc/carta")
+	viper.SetConfigFile("/etc/carta/config.toml")
 }
 
 func init() {

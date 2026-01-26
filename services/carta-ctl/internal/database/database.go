@@ -194,6 +194,7 @@ func (h *DbConfig) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 	switch {
 	case err == sql.ErrNoRows:
 		// No preferences stored yet, return empty
+		prefs = make(map[string]any)
 
 	case err != nil:
 		writeJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to query preferences: %v", err))
