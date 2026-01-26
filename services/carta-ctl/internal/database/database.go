@@ -906,7 +906,7 @@ func (h *DbConfig) handleSetWorkspace(w http.ResponseWriter, r *http.Request) {
 			body.WorkspaceName, user, id, jsonBytes,
 		)
 	} else {
-		_, err = h.db.ExecContext(
+		err = h.db.QueryRowContext(
 			r.Context(),
 			`INSERT INTO workspaces (name, username, content)
 			VALUES ($1, $2, $3::jsonb)
@@ -923,13 +923,13 @@ func (h *DbConfig) handleSetWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workspace["id"] = id
-	workspace["editable"] = true
+	body.Workspace["id"] = id
+	body.Workspace["editable"] = true
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]any{
-		"success": true,
-		"workspace": workspace,
+		"success":   true,
+		"workspace": body.Workspace,
 	}); err != nil {
 		slog.Error("Error encoding JSON response", "err", err)
 	}
